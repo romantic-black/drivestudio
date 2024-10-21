@@ -45,20 +45,18 @@ class WaymoCameraData(CameraData):
         super().__init__(**kwargs)
         
     def load_calibrations(self):
-        """
-        Load the camera intrinsics, extrinsics, timestamps, etc.
-        Compute the camera-to-world matrices, ego-to-world matrices, etc.
-        """
-        # load camera intrinsics
-        # 1d Array of [f_u, f_v, c_u, c_v, k{1, 2}, p{1, 2}, k{3}].
-        # ====!! we did not use distortion parameters for simplicity !!====
-        # to be improved!!
+
+        # 加载相机内参
+        # 1D 数组格式为 [f_u, f_v, c_u, c_v, k{1, 2}, p{1, 2}, k{3}]。
+        # ====!! 为了简化，我们没有使用畸变参数 !!====
+        # 未来可以改进!!
         intrinsic = np.loadtxt(
             os.path.join(self.data_path, "intrinsics", f"{self.cam_id}.txt")
         )
         fx, fy, cx, cy = intrinsic[0], intrinsic[1], intrinsic[2], intrinsic[3]
         k1, k2, p1, p2, k3 = intrinsic[4], intrinsic[5], intrinsic[6], intrinsic[7], intrinsic[8]
-        # scale intrinsics w.r.t. load size
+        
+        # 根据加载尺寸缩放内参
         fx, fy = (
             fx * self.load_size[1] / self.original_size[1],
             fy * self.load_size[0] / self.original_size[0],
@@ -70,23 +68,22 @@ class WaymoCameraData(CameraData):
         _intrinsics = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
         _distortions = np.array([k1, k2, p1, p2, k3])
 
-        # load camera extrinsics
+        # 加载相机外参
         cam_to_ego = np.loadtxt(
             os.path.join(self.data_path, "extrinsics", f"{self.cam_id}.txt")
         )
-        # because we use opencv coordinate system to generate camera rays,
-        # we need a transformation matrix to covnert rays from opencv coordinate
-        # system to waymo coordinate system.
-        # opencv coordinate system: x right, y down, z front
-        # waymo coordinate system: x front, y left, z up
+        # 因为我们使用OpenCV坐标系生成相机光线，
+        # 需要一个变换矩阵将光线从OpenCV坐标系转换到Waymo坐标系。
+        # OpenCV坐标系: x 右, y 下, z 前
+        # Waymo坐标系: x 前, y 左, z 上
         cam_to_ego = cam_to_ego @ OPENCV2DATASET
 
-        # compute per-image poses and intrinsics
+        # 计算每帧图像的姿态和内参
         cam_to_worlds, ego_to_worlds = [], []
         intrinsics, distortions = [], []
 
-        # we tranform the camera poses w.r.t. the first timestep to make the translation vector of
-        # the first ego pose as the origin of the world coordinate system.
+        # 我们将相机姿态相对于第一时间步进行变换，使得
+        # 第一个ego姿态的平移向量作为世界坐标系的原点。
         ego_to_world_start = np.loadtxt(
             os.path.join(self.data_path, "ego_pose", f"{self.start_timestep:03d}.txt")
         )
@@ -94,16 +91,17 @@ class WaymoCameraData(CameraData):
             ego_to_world_current = np.loadtxt(
                 os.path.join(self.data_path, "ego_pose", f"{t:03d}.txt")
             )
-            # compute ego_to_world transformation
+            # 计算ego到世界的变换
             ego_to_world = np.linalg.inv(ego_to_world_start) @ ego_to_world_current
             ego_to_worlds.append(ego_to_world)
-            # transformation:
+            # 变换过程：
             #   (opencv_cam -> waymo_cam -> waymo_ego_vehicle) -> current_world
             cam2world = ego_to_world @ cam_to_ego
             cam_to_worlds.append(cam2world)
             intrinsics.append(_intrinsics)
             distortions.append(_distortions)
 
+        # 将内参、畸变参数和相机到世界的变换矩阵转换为PyTorch张量
         self.intrinsics = torch.from_numpy(np.stack(intrinsics, axis=0)).float()
         self.distortions = torch.from_numpy(np.stack(distortions, axis=0)).float()
         self.cam_to_worlds = torch.from_numpy(np.stack(cam_to_worlds, axis=0)).float()
@@ -155,25 +153,27 @@ class WaymoPixelSource(ScenePixelSource):
         self.load_data()
 
     def load_cameras(self):
+        # 生成时间戳列表
         self._timesteps = torch.arange(self.start_timestep, self.end_timestep)
-        self.register_normalized_timestamps()
-
-        for idx, cam_id in enumerate(self.camera_list):
+        self.register_normalized_timestamps()   # 规范化至 [0, 1]
+        # 对每个相机生成
+        for idx, cam_id in enumerate(self.camera_list): # [0, 1, 2]
             logger.info(f"Loading camera {cam_id}")
             camera = WaymoCameraData(
                 dataset_name=self.dataset_name,
                 data_path=self.data_path,
                 cam_id=cam_id,
-                start_timestep=self.start_timestep,
-                end_timestep=self.end_timestep,
-                load_dynamic_mask=self.data_cfg.load_dynamic_mask,
-                load_sky_mask=self.data_cfg.load_sky_mask,
-                downscale_when_loading=self.data_cfg.downscale_when_loading[idx],
-                undistort=self.data_cfg.undistort,
-                buffer_downscale=self.buffer_downscale,
+                start_timestep=self.start_timestep,     # 0
+                end_timestep=self.end_timestep,         # 199
+                load_dynamic_mask=self.data_cfg.load_dynamic_mask,  # True
+                load_sky_mask=self.data_cfg.load_sky_mask,          # True
+                downscale_when_loading=self.data_cfg.downscale_when_loading[idx],   # [2, 2, 2]
+                undistort=self.data_cfg.undistort,      # True
+                buffer_downscale=self.buffer_downscale, # 8
                 device=self.device,
             )
             camera.load_time(self.normalized_time)
+            # 生成基于图像的索引
             unique_img_idx = torch.arange(len(camera), device=self.device) * len(self.camera_list) + idx
             camera.set_unique_ids(
                 unique_cam_idx = idx,
@@ -214,7 +214,8 @@ class WaymoPixelSource(ScenePixelSource):
         # shape (num_frames, num_instances, 4, 4)
         num_instances = len(instances_info)
         num_full_frames = len(frame_instances)
-        instances_pose = np.zeros((num_full_frames, num_instances, 4, 4))
+        # 考虑 frame 和 实例 两个维度
+        instances_pose = np.zeros((num_full_frames, num_instances, 4, 4))   # [199, 164, 4, 4]
         instances_size = np.zeros((num_full_frames, num_instances, 3))
         instances_true_id = np.arange(num_instances)
         instances_model_types = np.ones(num_instances) * -1
@@ -223,6 +224,7 @@ class WaymoPixelSource(ScenePixelSource):
             os.path.join(self.data_path, "ego_pose", f"{self.start_timestep:03d}.txt")
         )
         for k, v in instances_info.items():
+            # 映射到不同建模 model 的枚举
             instances_model_types[int(k)] = OBJECT_CLASS_NODE_MAPPING[v["class_name"]]
             for frame_idx, obj_to_world, box_size in zip(v["frame_annotations"]["frame_idx"], v["frame_annotations"]["obj_to_world"], v["frame_annotations"]["box_size"]):
                 # the first ego pose as the origin of the world coordinate system.
@@ -235,7 +237,7 @@ class WaymoPixelSource(ScenePixelSource):
         # shape (num_frames, num_instances)
         per_frame_instance_mask = np.zeros((num_full_frames, num_instances))
         for frame_idx, valid_instances in frame_instances.items():
-            per_frame_instance_mask[int(frame_idx), valid_instances] = 1
+            per_frame_instance_mask[int(frame_idx), valid_instances] = 1    # 扩展 frame_instances, 记录有效矩阵
         
         # select the frames that are in the range of start_timestep and end_timestep
         instances_pose = torch.from_numpy(instances_pose[self.start_timestep:self.end_timestep]).float()
@@ -244,7 +246,7 @@ class WaymoPixelSource(ScenePixelSource):
         instances_model_types = torch.from_numpy(instances_model_types).long()
         per_frame_instance_mask = torch.from_numpy(per_frame_instance_mask[self.start_timestep:self.end_timestep]).bool()
         
-        # filter out the instances that are not visible in selected frames
+        # 删除未出现过的实例
         ins_frame_cnt = per_frame_instance_mask.sum(dim=0)
         instances_pose = instances_pose[:, ins_frame_cnt > 0]
         instances_size = instances_size[:, ins_frame_cnt > 0]
@@ -264,10 +266,10 @@ class WaymoPixelSource(ScenePixelSource):
         # (num_instances)
         self.instances_model_types = instances_model_types
         
-        if self.data_cfg.load_smpl:
+        if self.data_cfg.load_smpl: # True
             # Collect camera-to-world matrices for all available cameras
             cam_to_worlds = {}
-            for cam_id in AVAILABLE_CAM_LIST:
+            for cam_id in AVAILABLE_CAM_LIST:   # [0,1,2,3,4]
                 cam_to_worlds[cam_id] = WaymoCameraData.get_camera2worlds(
                     self.data_path, 
                     str(cam_id), 

@@ -127,7 +127,7 @@ class WaymoProcessor(object):
         track_parallel_progress(self.convert_one, id_list, self.workers)
         print("\nFinished ...")
 
-    def convert_one(self, file_idx):
+    def convert_one(self, file_idx):    # 23
         """Convert action for single file.
 
         Args:
@@ -135,7 +135,7 @@ class WaymoProcessor(object):
         """
         pathname = self.tfrecord_pathnames[file_idx]
         dataset = tf.data.TFRecordDataset(pathname, compression_type="")
-        num_frames = sum(1 for _ in dataset)
+        num_frames = sum(1 for _ in dataset)    # 199
         for frame_idx, data in enumerate(
             tqdm(dataset, desc=f"File {file_idx}", total=num_frames, dynamic_ncols=True)
         ):
@@ -521,18 +521,31 @@ class WaymoProcessor(object):
         # Correct ID mapping
         id_map = {}
         for i, (k, v) in enumerate(instances_info.items()):
-            id_map[v["id"]] = i
+            id_map[v["id"]] = i     # key: 实例的 str_id, value: id
 
         # Update keys in instances_info
         new_instances_info = {}
-        for k, v in instances_info.items():
+        for k, v in instances_info.items():     # key: id
             new_instances_info[id_map[v["id"]]] = v
 
         # Update keys in frame_instances
         new_frame_instances = {}
-        for k, v in frame_instances.items():
+        for k, v in frame_instances.items():    # key: frame_id, v: list of id
             new_frame_instances[k] = [id_map[i] for i in v]
-
+        # instances_info: {
+        #     id: {
+        #         id: str,
+        #         class_name: str,
+        #         frame_annotations: {
+        #             frame_idx: [],
+        #             obj_to_world: [],
+        #             box_size: []
+        #         }
+        #     }
+        # }
+        # frame_instances: {
+        #     frame_idx: [id]
+        # }
         return new_instances_info, new_frame_instances
 
     def create_folder(self):

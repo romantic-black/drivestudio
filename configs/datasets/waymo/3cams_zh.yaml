@@ -1,0 +1,43 @@
+# Waymo 数据集配置
+# 已处理的相机：
+#   索引    相机名称             原始尺寸
+#    0    front_camera       (1920, 1280)
+#    1    front_left_camera  (1920, 1280)
+#    2    front_right_camera (1920, 1280)
+#    3    left_camera        (1920, 866)
+#    4    right_camera       (1920, 866)
+
+data:
+  data_root: data/waymo/processed/training # 数据集的根目录
+  dataset: waymo
+  scene_idx: 0 # 使用的场景索引，对于 Waymo 的训练集为 [0, 798]，对于 nuScenes 的训练/验证集为 [0, 849]，包含端点
+  start_timestep: 0 # 起始的时间步
+  end_timestep: -1 # 结束的时间步，-1 表示最后一个时间步
+  preload_device: cuda # 选择 ["cpu", "cuda"]，在此设备上缓存数据
+  pixel_source: # 图像来源和对象注释
+    type: datasets.waymo.waymo_sourceloader.WaymoPixelSource
+    cameras: [0, 1, 2] # 使用的相机索引
+    downscale_when_loading: [2, 2, 2] # 加载图像时的缩放因子
+    downscale: 1 # 相对于 downscale_when_loading 的进一步缩放因子
+    undistort: True # 是否对图像进行去畸变处理
+    test_image_stride: 0 # 测试集每隔 N 个时间步使用一次；如果为 0，则训练使用所有图像，测试不使用任何图像
+    load_sky_mask: True # 是否加载天空掩码
+    load_dynamic_mask: True # 是否加载动态掩码
+    load_objects: True # 是否加载物体边界框
+    load_smpl: True # 是否为行人加载 SMPL 模板
+    sampler: # 基于误差的图像采样器
+      buffer_downscale: 8 # 缓冲区相对于加载尺寸的缩放因子
+      buffer_ratio: 0.5 # 根据误差缓冲区采样的图像比例
+      start_enhance_weight: 3 # 增加采样起始帧的概率，起始帧通常误差更大
+  lidar_source: # 与激光雷达相关的所有内容 —— 来自激光雷达点
+    type: datasets.waymo.waymo_sourceloader.WaymoLiDARSource
+    load_lidar: True # 是否加载激光雷达数据
+    only_use_top_lidar: False # 是否仅使用顶部激光雷达
+    truncated_max_range: 80 # 在自车坐标系下截断的激光雷达最大范围
+    truncated_min_range: -2 # 在自车坐标系下截断的激光雷达最小范围
+    # ---- 从激光雷达计算 AABB（轴对齐包围盒） ---- #
+    # 如果 load_lidar 为 True，我们从激光雷达计算 AABB，否则从相机计算 AABB
+    # 1) 通过随机采样将激光雷达点下采样至 1/lidar_downsample_factor 的数量
+    # 2) 使用 lidar_percentile 指定的百分位数，从下采样的激光雷达点计算 AABB
+    lidar_downsample_factor: 4 # 通过此因子下采样激光雷达以计算百分位数
+    lidar_percentile: 0.02  # 用于从激光雷达计算 AABB 的百分位数

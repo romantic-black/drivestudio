@@ -144,7 +144,7 @@ class DrivingDataset(SceneDataset):
         """
         Create the data source for the dataset.
         """
-        # ---- create pixel source ---- #
+        # ---- create pixel source ---- #   # WaymoPixelSource
         pixel_source = import_str(self.data_cfg.pixel_source.type)(
             self.data_cfg.dataset,
             self.data_cfg.pixel_source,

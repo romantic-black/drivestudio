@@ -135,7 +135,7 @@ class CameraData(object):
         self.load_calibrations()
         self.load_images()
         self.load_egocar_mask()
-        if load_dynamic_mask:
+        if load_dynamic_mask:   # True
             self.load_dynamic_masks()
         if load_sky_mask:
             self.load_sky_masks()
@@ -245,7 +245,7 @@ class CameraData(object):
             rgb = rgb.resize(
                 (self.load_size[1], self.load_size[0]), Image.BILINEAR
             )
-            # undistort the images
+            # undistort the images (去畸变)
             if self.undistort:
                 if ix == 0:
                     print("undistorting rgb")
@@ -264,7 +264,7 @@ class CameraData(object):
         we need to load the ego car mask to mask out the ego car body.
         """
         egocar_mask = os.path.join("data", "ego_masks", self.dataset_name, f"{self.cam_id}.png")
-        if os.path.exists(egocar_mask):
+        if os.path.exists(egocar_mask): # False, Waymo do not need ego mask
             egocar_mask = Image.open(egocar_mask).convert("L")
             # resize them to the load_size
             egocar_mask = egocar_mask.resize(
@@ -722,7 +722,7 @@ class ScenePixelSource(abc.ABC):
         self.build_image_error_buffer()
         logger.info("[Pixel] All Pixel Data loaded.")
         
-        if self.data_cfg.load_objects:
+        if self.data_cfg.load_objects:  # True
             self.load_objects()
             logger.info("[Pixel] All Object Annotations loaded.")
         
@@ -886,7 +886,7 @@ class ScenePixelSource(abc.ABC):
         return self._normalized_time
 
     def register_normalized_timestamps(self) -> None:
-        # normalized timestamps are between 0 and 1
+        # 将时间戳标准化至 [0, 1] 的范围内, 以便在训练或推理过程中使用
         normalized_time = (self._timesteps - self._timesteps.min()) / (
             self._timesteps.max() - self._timesteps.min()
         )
@@ -939,8 +939,9 @@ class ScenePixelSource(abc.ABC):
         """
         Build the image error buffer.
         """
-        if self.buffer_ratio > 0:
+        if self.buffer_ratio > 0:   # True
             for cam_id in self.camera_list:
+                # 记录每张图像的渲染误差, 用于记录日志, 不用于训练, 参考 update_image_error_maps
                 self.camera_data[cam_id].build_image_error_buffer()
         else:
             logger.info("Not building image error buffer because buffer_ratio <= 0.")
