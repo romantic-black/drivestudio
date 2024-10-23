@@ -656,7 +656,7 @@ class CameraData(object):
         }
         return image_infos, cam_infos
 
-class ScenePixelSource(abc.ABC):
+class  ScenePixelSource(abc.ABC):
     """
     The base class for all pixel sources of a scene.
     """

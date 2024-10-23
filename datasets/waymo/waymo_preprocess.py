@@ -288,6 +288,7 @@ class WaymoProcessor(object):
             range_image_top_pose,
             ri_index=0,
         )
+        # 拼合 5 个雷达的点
         origins = np.concatenate(origins, axis=0)
         points = np.concatenate(points, axis=0)
         ground_label = get_ground_np(points)
@@ -306,13 +307,13 @@ class WaymoProcessor(object):
 
         point_cloud = np.column_stack(
             (
-                origins,
-                points,
-                flows,
-                ground_label,
+                origins,        # 点云的原点(雷达位置)
+                points,         # 点云坐标
+                flows,          # 场景流
+                ground_label,   # 是否为地面
                 intensity,
                 elongation,
-                laser_ids,
+                laser_ids,      # 雷达 id
             )
         )
         pc_path = (

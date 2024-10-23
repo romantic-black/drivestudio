@@ -358,6 +358,7 @@ class WaymoLiDARSource(SceneLidarSource):
         # as the vehicle coordinate system
         lidar_to_worlds = []
 
+        # 以 t=0 时刻 ego 位姿为原点
         # we tranform the poses w.r.t. the first timestep to make the origin of the
         # first ego pose as the origin of the world coordinate system.
         ego_to_world_start = np.loadtxt(
@@ -371,7 +372,7 @@ class WaymoLiDARSource(SceneLidarSource):
             lidar_to_world = np.linalg.inv(ego_to_world_start) @ ego_to_world_current
             lidar_to_worlds.append(lidar_to_world)
 
-        self.lidar_to_worlds = torch.from_numpy(
+        self.lidar_to_worlds = torch.from_numpy(    # [199, 4, 4]
             np.stack(lidar_to_worlds, axis=0)
         ).float()
 
@@ -403,61 +404,61 @@ class WaymoLiDARSource(SceneLidarSource):
             accumulated_num_original_rays += original_length
 
             # select lidar points based on the laser id
-            if self.data_cfg.only_use_top_lidar:
+            if self.data_cfg.only_use_top_lidar:    # False
                 # laser_ids: 0: TOP, 1: FRONT, 2: SIDE_LEFT, 3: SIDE_RIGHT, 4: REAR
                 lidar_info = lidar_info[lidar_info[:, 13] == 0]
 
-            lidar_origins = torch.from_numpy(lidar_info[:, :3]).float()
-            lidar_points = torch.from_numpy(lidar_info[:, 3:6]).float()
-            lidar_ids = torch.from_numpy(lidar_info[:, 13]).float()
-            lidar_flows = torch.from_numpy(lidar_info[:, 6:9]).float()
-            lidar_flow_classes = torch.from_numpy(lidar_info[:, 9]).long()
-            ground_labels = torch.from_numpy(lidar_info[:, 10]).long()
+            lidar_origins = torch.from_numpy(lidar_info[:, :3]).float()  # 提取原点
+            lidar_points = torch.from_numpy(lidar_info[:, 3:6]).float()  # 提取点坐标
+            lidar_ids = torch.from_numpy(lidar_info[:, 13]).float()  # 提取激光器ID
+            lidar_flows = torch.from_numpy(lidar_info[:, 6:9]).float()  # 提取流动信息
+            lidar_flow_classes = torch.from_numpy(lidar_info[:, 9]).long()  # 提取流动类别
+            ground_labels = torch.from_numpy(lidar_info[:, 10]).long()  # 提取地面标签
             # we don't collect intensities and elongations for now
 
             # select lidar points based on a truncated ego-forward-directional range
             # this is to make sure most of the lidar points are within the range of the camera
-            valid_mask = torch.ones_like(lidar_origins[:, 0]).bool()
+            valid_mask = torch.ones_like(lidar_origins[:, 0]).bool()  # 创建有效掩码
             if self.data_cfg.truncated_max_range is not None:
-                valid_mask = lidar_points[:, 0] < self.data_cfg.truncated_max_range
+                valid_mask = lidar_points[:, 0] < self.data_cfg.truncated_max_range  # 应用最大范围过滤
             if self.data_cfg.truncated_min_range is not None:
                 valid_mask = valid_mask & (
-                    lidar_points[:, 0] > self.data_cfg.truncated_min_range
+                    lidar_points[:, 0] > self.data_cfg.truncated_min_range  # 应用最小范围过滤
                 )
-            lidar_origins = lidar_origins[valid_mask]
-            lidar_points = lidar_points[valid_mask]
-            lidar_ids = lidar_ids[valid_mask]
-            lidar_flows = lidar_flows[valid_mask]
-            lidar_flow_classes = lidar_flow_classes[valid_mask]
-            ground_labels = ground_labels[valid_mask]
+            lidar_origins = lidar_origins[valid_mask]  # 过滤原点
+            lidar_points = lidar_points[valid_mask]  # 过滤点坐标
+            lidar_ids = lidar_ids[valid_mask]  # 过滤激光器ID
+            lidar_flows = lidar_flows[valid_mask]  # 过滤流动信息
+            lidar_flow_classes = lidar_flow_classes[valid_mask]  # 过滤流动类别
+            ground_labels = ground_labels[valid_mask]  # 过滤地面标签
             # transform lidar points from lidar coordinate system to world coordinate system
             lidar_origins = (
                 self.lidar_to_worlds[t][:3, :3] @ lidar_origins.T
                 + self.lidar_to_worlds[t][:3, 3:4]
-            ).T
+            ).T  # 转换原点到世界坐标系
             lidar_points = (
                 self.lidar_to_worlds[t][:3, :3] @ lidar_points.T
                 + self.lidar_to_worlds[t][:3, 3:4]
-            ).T
+            ).T  # 转换点坐标到世界坐标系
             # scene flows are in the lidar coordinate system, so we need to rotate them
-            lidar_flows = (self.lidar_to_worlds[t][:3, :3] @ lidar_flows.T).T
+            lidar_flows = (self.lidar_to_worlds[t][:3, :3] @ lidar_flows.T).T  # 转换流动信息
             # compute lidar directions
-            lidar_directions = lidar_points - lidar_origins
-            lidar_ranges = torch.norm(lidar_directions, dim=-1, keepdim=True)
-            lidar_directions = lidar_directions / lidar_ranges
+            lidar_directions = lidar_points - lidar_origins  # 计算激光点的方向
+            lidar_ranges = torch.norm(lidar_directions, dim=-1, keepdim=True)  # 计算激光点的范围
+            lidar_directions = lidar_directions / lidar_ranges  # 归一化方向
             # we use time indices as the timestamp for waymo dataset
-            lidar_timestamp = torch.ones_like(lidar_ranges).squeeze(-1) * t
-            accumulated_num_rays += len(lidar_ranges)
+            lidar_timestamp = torch.ones_like(lidar_ranges).squeeze(-1) * t  # 生成时间戳
+            accumulated_num_rays += len(lidar_ranges)  # 累加激光点数量
 
-            origins.append(lidar_origins)
-            directions.append(lidar_directions)
-            ranges.append(lidar_ranges)
-            laser_ids.append(lidar_ids)
-            flows.append(lidar_flows)
-            flow_classes.append(lidar_flow_classes)
-            grounds.append(ground_labels)
+            origins.append(lidar_origins)  # 添加原点
+            directions.append(lidar_directions)  # 添加方向
+            ranges.append(lidar_ranges)  # 添加范围
+            laser_ids.append(lidar_ids)  # 添加激光器ID
+            flows.append(lidar_flows)  # 添加流动信息
+            flow_classes.append(lidar_flow_classes)  # 添加流动类别
+            grounds.append(ground_labels)  # 添加地面标签
             # we use time indices as the timestamp for waymo dataset
-            timesteps.append(lidar_timestamp)
+            timesteps.append(lidar_timestamp)  # 添加时间戳
 
         logger.info(
             f"Number of lidar rays: {accumulated_num_rays} "
@@ -469,22 +470,22 @@ class WaymoLiDARSource(SceneLidarSource):
         logger.info(f"  truncated_max_range: {self.data_cfg.truncated_max_range}")
         logger.info(f"  truncated_min_range: {self.data_cfg.truncated_min_range}")
 
-        self.origins = torch.cat(origins, dim=0)
-        self.directions = torch.cat(directions, dim=0)
-        self.ranges = torch.cat(ranges, dim=0)
-        self.laser_ids = torch.cat(laser_ids, dim=0)
-        self.visible_masks = torch.zeros_like(self.ranges).squeeze().bool()
-        self.colors = torch.ones_like(self.directions)
+        self.origins = torch.cat(origins, dim=0)  # 合并所有原点
+        self.directions = torch.cat(directions, dim=0)  # 合并所有方向
+        self.ranges = torch.cat(ranges, dim=0)  # 合并所有范围
+        self.laser_ids = torch.cat(laser_ids, dim=0)  # 合并所有激光器ID
+        self.visible_masks = torch.zeros_like(self.ranges).squeeze().bool()  # 初始化可见掩码
+        self.colors = torch.ones_like(self.directions)  # 初始化颜色
         # becasue the flows here are velocities (m/s), and the fps of the lidar is 10,
         # we need to divide the velocities by 10 to get the displacements/flows
         # between two consecutive lidar scans
-        self.flows = torch.cat(flows, dim=0) / 10.0
-        self.flow_classes = torch.cat(flow_classes, dim=0)
-        self.grounds = torch.cat(grounds, dim=0).bool()
+        self.flows = torch.cat(flows, dim=0) / 10.0  # 合并流动信息并归一化
+        self.flow_classes = torch.cat(flow_classes, dim=0)  # 合并流动类别
+        self.grounds = torch.cat(grounds, dim=0).bool()  # 合并地面标签
 
         # the underscore here is important.
-        self._timesteps = torch.cat(timesteps, dim=0)
-        self.register_normalized_timestamps()
+        self._timesteps = torch.cat(timesteps, dim=0)  # 合并时间戳
+        self.register_normalized_timestamps()  # 注册规范化时间戳
 
     def to(self, device: torch.device):
         super().to(device)
@@ -533,3 +534,4 @@ class WaymoLiDARSource(SceneLidarSource):
             self.visible_masks = None
         else:
             logger.info("[Lidar] No unvisible points to clear.")
+
