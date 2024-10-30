@@ -74,7 +74,7 @@ class SceneDataset(abc.ABC):
         raise NotImplementedError
 
     def get_aabb(self) -> Tensor:
-        if self.lidar_source is not None:
+        if self.lidar_source is not None:   # True
             aabb = self.lidar_source.get_aabb()
         else:
             aabb = self.pixel_source.get_aabb()

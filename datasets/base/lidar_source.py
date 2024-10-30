@@ -118,7 +118,7 @@ class SceneLidarSource(abc.ABC):
         logger.info("[Lidar] Computing auto AABB based on downsampled lidar points....")
 
         lidar_pts = self.origins + self.directions * self.ranges
-
+        # 随机降采样
         # downsample the lidar points by uniformly sampling a subset of them
         lidar_pts = lidar_pts[
             torch.randperm(len(lidar_pts))[
@@ -126,7 +126,7 @@ class SceneLidarSource(abc.ABC):
             ]
         ]
         # compute the aabb by taking the given percentiles of the lidar coordinates in each dimension
-        aabb_min = torch.quantile(lidar_pts, self.data_cfg.lidar_percentile, dim=0)
+        aabb_min = torch.quantile(lidar_pts, self.data_cfg.lidar_percentile, dim=0)     # 0.02 to 0.98
         aabb_max = torch.quantile(lidar_pts, 1 - self.data_cfg.lidar_percentile, dim=0)
         del lidar_pts
         torch.cuda.empty_cache()

@@ -187,6 +187,7 @@ def main(args):
     for step in metric_logger.log_every(all_iters, cfg.logging.print_freq):
         #----------------------------------------------------------------------------
         #----------------------------     Validate     ------------------------------
+        # 该 if 块不重要, 跳过
         if step % cfg.logging.vis_freq == 0 and cfg.logging.vis_freq > 0:
             logger.info("Visualizing...")
             vis_timestep = np.linspace(
@@ -197,7 +198,7 @@ def main(args):
                 dtype=int,
             )[step // cfg.logging.vis_freq]
             with torch.no_grad():
-                render_results = render_images(
+                render_results = render_images(     # 只是渲染, 没有训练
                     trainer=trainer,
                     dataset=dataset.full_image_set,
                     compute_metrics=True,

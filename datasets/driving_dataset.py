@@ -144,7 +144,7 @@ class DrivingDataset(SceneDataset):
         """
         Create the data source for the dataset.
         """
-        # ---- create pixel source ---- #   # to WaymoPixelSource
+        # ---- create pixel source ---- #   # to WaymoPixelSource/WaymoLiDARSource
         pixel_source = import_str(self.data_cfg.pixel_source.type)(
             self.data_cfg.dataset,
             self.data_cfg.pixel_source,
@@ -304,7 +304,7 @@ class DrivingDataset(SceneDataset):
                     if not o_type == ModelType.RigidNodes:
                         continue
                 
-                if exclude_smpl:
+                if exclude_smpl:    # False
                     # objects with smpl pose will be modeled by SMPLNodes
                     assert cur_node_type == "DeformableNodes", \
                         "Only exclude SMPL for DeformableNodes"
@@ -342,13 +342,13 @@ class DrivingDataset(SceneDataset):
                 # instance_dict[ins_id]["flows"].append(valid_flows)
         
         logger.info(f"Aggregating lidar points across {self.frame_num} frames")
-        for ins_id in instance_dict:
+        for ins_id in instance_dict:    # 对每个实例, 合并其所有帧的雷达点
             instance_dict[ins_id]["pts"] = torch.cat(instance_dict[ins_id]["pts"], dim=0)
             instance_dict[ins_id]["colors"] = torch.cat(instance_dict[ins_id]["colors"], dim=0)
             # instance_dict[ins_id]["flows"] = torch.cat(instance_dict[ins_id]["flows"], dim=0)
             instance_dict[ins_id]["num_pts"] = instance_dict[ins_id]["pts"].shape[0]
             if instance_dict[ins_id]["num_pts"] > instance_max_pts:
-                # randomly sample points
+                # 移除点数过多的实例
                 sampled_idx = torch.randperm(instance_dict[ins_id]["num_pts"])[:instance_max_pts]
                 instance_dict[ins_id]["pts"] = instance_dict[ins_id]["pts"][sampled_idx]
                 instance_dict[ins_id]["colors"] = instance_dict[ins_id]["colors"][sampled_idx]
@@ -356,8 +356,8 @@ class DrivingDataset(SceneDataset):
                 instance_dict[ins_id]["num_pts"] = instance_max_pts
             logger.info(f"Instance {ins_id} has {instance_dict[ins_id]['num_pts']} lidar sample points")
         
-        if only_moving:
-            # consider only the instances with non-zero flows
+        if only_moving:     # True
+            # 只考虑运动的实例
             logger.info(f"Filtering out the instances with non-moving trajectories")
             new_instance_dict = {}
             for k, v in instance_dict.items():
@@ -582,7 +582,7 @@ class DrivingDataset(SceneDataset):
         return valid_mask
 
     def split_train_test(self):
-        if self.data_cfg.pixel_source.test_image_stride != 0:
+        if self.data_cfg.pixel_source.test_image_stride != 0:   # Flase
             test_timesteps = np.arange(
                 # it makes no sense to have test timesteps before the start timestep
                 self.data_cfg.pixel_source.test_image_stride,
@@ -628,9 +628,9 @@ class DrivingDataset(SceneDataset):
             delete_out_of_view_points: bool
                 If True, the lidar points that are not visible from the camera will be removed.
         """
-        for cam in self.pixel_source.camera_data.values():
+        for cam in self.pixel_source.camera_data.values():  # 遍历 5 个相机
             lidar_depth_maps = []
-            for frame_idx in tqdm(
+            for frame_idx in tqdm(      # 遍历所有帧
                 range(len(cam)), 
                 desc="Projecting lidar pts on images for camera {}".format(cam.cam_name),
                 dynamic_ncols=True
@@ -702,7 +702,7 @@ class DrivingDataset(SceneDataset):
                 torch.stack(lidar_depth_maps, dim=0).to(self.device).float()
             )
             
-        if delete_out_of_view_points:
+        if delete_out_of_view_points:   # True
             self.lidar_source.delete_invisible_pts()
             
     def get_novel_render_traj(

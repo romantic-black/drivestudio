@@ -24,22 +24,22 @@ class MultiTrainer(BasicTrainer):
         
     def _init_models(self):
         # gaussian model classes
-        if "Background" in self.model_config:
+        if "Background" in self.model_config:   # True
             self.gaussian_classes["Background"] = GSModelType.Background
-        if "RigidNodes" in self.model_config:
+        if "RigidNodes" in self.model_config:   # True
             self.gaussian_classes["RigidNodes"] = GSModelType.RigidNodes
-        if "SMPLNodes" in self.model_config:
+        if "SMPLNodes" in self.model_config:    # True
             self.gaussian_classes["SMPLNodes"] = GSModelType.SMPLNodes
-        if "DeformableNodes" in self.model_config:
+        if "DeformableNodes" in self.model_config:  # True
             self.gaussian_classes["DeformableNodes"] = GSModelType.DeformableNodes
-           
+        # class_name: 'Background', 'RigidNodes', 'DeformableNodes', 'SMPLNodes', 'Sky', 'Affine', 'CamPose'
         for class_name, model_cfg in self.model_config.items():
             # update model config for gaussian classes
-            if class_name in self.gaussian_classes:
+            if class_name in self.gaussian_classes: # Background', 'RigidNodes', 'DeformableNodes', 'SMPLNodes'
                 model_cfg = self.model_config.pop(class_name)
                 self.model_config[class_name] = self.update_gaussian_cfg(model_cfg)
                 
-            if class_name in self.gaussian_classes.keys():
+            if class_name in self.gaussian_classes.keys():  # 和上面一样
                 model = import_str(model_cfg.type)(
                     **model_cfg,
                     class_name=class_name,
@@ -49,7 +49,7 @@ class MultiTrainer(BasicTrainer):
                     device=self.device
                 )
                 
-            if class_name in self.misc_classes_keys:
+            if class_name in self.misc_classes_keys:    # ['Sky', 'Affine', 'CamPose', 'CamPosePerturb'(未使用)]
                 model = import_str(model_cfg.type)(
                     class_name=class_name,
                     **model_cfg.get('params', {}),
@@ -122,7 +122,7 @@ class MultiTrainer(BasicTrainer):
                 # ------ initialize gaussians ------
                 init_cfg = model_cfg.pop('init')
                 # sample points from the lidar point clouds
-                if init_cfg.get("from_lidar", None) is not None:
+                if init_cfg.get("from_lidar", None) is not None:    # True
                     sampled_pts, sampled_color, sampled_time = dataset.get_lidar_samples(
                         **init_cfg.from_lidar, device=self.device
                     )
@@ -132,11 +132,11 @@ class MultiTrainer(BasicTrainer):
                 
                 random_pts = []
                 num_near_pts = init_cfg.get('near_randoms', 0)
-                if num_near_pts > 0: # uniformly sample points inside the scene's sphere
+                if num_near_pts > 0: # True, uniformly sample points inside the scene's sphere
                     num_near_pts *= 3 # since some invisible points will be filtered out
                     random_pts.append(uniform_sample_sphere(num_near_pts, self.device))
                 num_far_pts = init_cfg.get('far_randoms', 0)
-                if num_far_pts > 0: # inverse distances uniformly from (0, 1 / scene_radius)
+                if num_far_pts > 0: # True, inverse distances uniformly from (0, 1 / scene_radius)
                     num_far_pts *= 3
                     random_pts.append(uniform_sample_sphere(num_far_pts, self.device, inverse=True))
                 
@@ -211,7 +211,7 @@ class MultiTrainer(BasicTrainer):
 
         # set current time or use temporal smoothing
         normed_time = image_infos["normed_time"].flatten()[0]
-        self.cur_frame = torch.argmin(
+        self.cur_frame = torch.argmin(      # 当前帧序号
             torch.abs(self.normalized_timestamps - normed_time)
         )
         
@@ -257,7 +257,7 @@ class MultiTrainer(BasicTrainer):
             outputs["rgb_gaussians"] + outputs["rgb_sky"] * (1.0 - outputs["opacity"]), image_infos
         )
         
-        if not self.training and self.render_each_class:
+        if not self.training and self.render_each_class:    # False
             with torch.no_grad():
                 for class_name in self.gaussian_classes.keys():
                     gaussian_mask = self.pts_labels == self.gaussian_classes[class_name]
@@ -266,7 +266,7 @@ class MultiTrainer(BasicTrainer):
                     outputs[class_name+"_opacity"] = sep_opacity
                     outputs[class_name+"_depth"] = sep_depth
 
-        if not self.training or self.render_dynamic_mask:
+        if not self.training or self.render_dynamic_mask:   # False
             with torch.no_grad():
                 gaussian_mask = self.pts_labels != self.gaussian_classes["Background"]
                 sep_rgb, sep_depth, sep_opacity = render_fn(gaussian_mask)

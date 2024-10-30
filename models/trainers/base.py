@@ -140,7 +140,7 @@ class BasicTrainer(nn.Module):
         self.eval()
 
     def _get_downscale_factor(self):
-        if self.training:
+        if self.training:   # True
             return 2 ** max((self.res_schedule.downscale_times - self.step // self.res_schedule.double_steps), 0)
         else:
             return 1
@@ -278,7 +278,7 @@ class BasicTrainer(nn.Module):
         
     def postprocess_per_train_step(self, step: int) -> None:
         radii = self.info["radii"]
-        if self.render_cfg.absgrad:
+        if self.render_cfg.absgrad:     # True
             grads = self.info["means2d"].absgrad.clone()
         else:
             grads = self.info["means2d"].grad.clone()
@@ -311,8 +311,8 @@ class BasicTrainer(nn.Module):
     
     def update_visibility_filter(self) -> None:
         for class_name in self.gaussian_classes.keys():
-            gaussian_mask = self.pts_labels == self.gaussian_classes[class_name]
-            self.models[class_name].cur_radii = self.info["radii"][0, gaussian_mask]
+            gaussian_mask = self.pts_labels == self.gaussian_classes[class_name]    # GS 模型类型的索引
+            self.models[class_name].cur_radii = self.info["radii"][0, gaussian_mask]    # radii: 渲染的中间量
 
     def process_camera(
         self,
@@ -322,10 +322,10 @@ class BasicTrainer(nn.Module):
     ) -> dataclass_camera:
         camtoworlds = camtoworlds_gt = camera_infos["camera_to_world"]
         
-        if "CamPosePerturb" in self.models.keys() and not novel_view:
+        if "CamPosePerturb" in self.models.keys() and not novel_view:   # False
             camtoworlds = self.models["CamPosePerturb"](camtoworlds, image_ids)
 
-        if "CamPose" in self.models.keys() and not novel_view:
+        if "CamPose" in self.models.keys() and not novel_view:          # True
             camtoworlds = self.models["CamPose"](camtoworlds, image_ids)
         
         # collect camera information
@@ -365,7 +365,7 @@ class BasicTrainer(nn.Module):
         for k, v in gs_dict.items():
             gs_dict[k] = torch.cat(v, dim=0)
             
-        # get the class labels
+        # get the class labels, class_labels: GS 模型类型的索引
         self.pts_labels = gs_dict.pop("class_labels")
         if self.render_dynamic_mask:
             self.dynamic_pts_mask = (self.pts_labels != 0).float()

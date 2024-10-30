@@ -450,12 +450,12 @@ class WaymoLiDARSource(SceneLidarSource):
             lidar_timestamp = torch.ones_like(lidar_ranges).squeeze(-1) * t  # 生成时间戳
             accumulated_num_rays += len(lidar_ranges)  # 累加激光点数量
 
-            origins.append(lidar_origins)  # 添加原点
-            directions.append(lidar_directions)  # 添加方向
-            ranges.append(lidar_ranges)  # 添加范围
-            laser_ids.append(lidar_ids)  # 添加激光器ID
-            flows.append(lidar_flows)  # 添加流动信息
-            flow_classes.append(lidar_flow_classes)  # 添加流动类别
+            origins.append(lidar_origins)  # 添加雷达位置
+            directions.append(lidar_directions)  # 添加点的方向
+            ranges.append(lidar_ranges)  # 添加点的距离
+            laser_ids.append(lidar_ids)  # 添加雷达 ID
+            flows.append(lidar_flows)  # 添加场景流
+            flow_classes.append(lidar_flow_classes)  # 添加场景流类别
             grounds.append(ground_labels)  # 添加地面标签
             # we use time indices as the timestamp for waymo dataset
             timesteps.append(lidar_timestamp)  # 添加时间戳
@@ -471,9 +471,9 @@ class WaymoLiDARSource(SceneLidarSource):
         logger.info(f"  truncated_min_range: {self.data_cfg.truncated_min_range}")
 
         self.origins = torch.cat(origins, dim=0)  # 合并所有原点
-        self.directions = torch.cat(directions, dim=0)  # 合并所有方向
-        self.ranges = torch.cat(ranges, dim=0)  # 合并所有范围
-        self.laser_ids = torch.cat(laser_ids, dim=0)  # 合并所有激光器ID
+        self.directions = torch.cat(directions, dim=0)
+        self.ranges = torch.cat(ranges, dim=0)
+        self.laser_ids = torch.cat(laser_ids, dim=0)
         self.visible_masks = torch.zeros_like(self.ranges).squeeze().bool()  # 初始化可见掩码
         self.colors = torch.ones_like(self.directions)  # 初始化颜色
         # becasue the flows here are velocities (m/s), and the fps of the lidar is 10,

@@ -910,7 +910,7 @@ class  ScenePixelSource(abc.ABC):
         self,
         candidate_indices: Tensor = None,
     ) -> Dict[str, Tensor]:
-        if random.random() < self.buffer_ratio and self.image_error_buffered:
+        if random.random() < self.buffer_ratio and self.image_error_buffered:   # False
             # sample according to the image error buffer
             image_mean_error = self.image_error_buffer[candidate_indices]
             start_enhance_weight = self.data_cfg.sampler.get('start_enhance_weight', 1)

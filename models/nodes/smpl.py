@@ -92,7 +92,7 @@ class SMPLNodes(RigidNodes):
             cano_pose_type="da_pose",
             use_voxel_deformer=self.use_voxel_deformer
         )
-        if self.use_voxel_deformer:
+        if self.use_voxel_deformer:     # True
             self.template.voxel_deformer.enable_voxel_correction()
         
         opacity_init_value = torch.tensor(self.ctrl_cfg.opacity_init_value)
@@ -110,7 +110,7 @@ class SMPLNodes(RigidNodes):
         # knn init
         self.update_knn(x)
         
-        if self.ctrl_cfg.constrain_xyz_offset:
+        if self.ctrl_cfg.constrain_xyz_offset:  # False
             self.on_mesh_x = x.clone()
         
         # NOTE: In the future, we will also use colors of lidars to get the initialization of colors
@@ -349,7 +349,7 @@ class SMPLNodes(RigidNodes):
         if instance_mask.sum() == 0:
             return None
                 
-        if self.ball_gaussians:
+        if self.ball_gaussians:     # False
             world_means = self.transform_means(self._means)
             world_quats = self._quats
         else:

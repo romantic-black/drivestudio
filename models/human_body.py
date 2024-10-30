@@ -110,7 +110,7 @@ class SMPLTemplate(nn.Module):
 
         v_init = init_smpl_output.vertices  # [B, 6890, 3]
         W_init = self._template_layer.lbs_weights  # [6890, 24]
-        self.register_buffer("W", W_init[None].repeat(num_human, 1, 1))
+        self.register_buffer("W", W_init[None].repeat(num_human, 1, 1))  # 注意: 登记 W
 
         self.use_voxel_deformer = use_voxel_deformer
         if self.use_voxel_deformer:
@@ -157,7 +157,7 @@ class SMPLTemplate(nn.Module):
 
     def forward(self, masked_theta=None, xyz_canonical=None, instances_mask=None):
         # skinning
-        if masked_theta is None:
+        if masked_theta is None:    # False
             A = None
         else:
             assert (
@@ -171,7 +171,7 @@ class SMPLTemplate(nn.Module):
             )
             A = torch.einsum("bnij, bnjk->bnik", A, self.A0_inv[instances_mask])  # B,24,4,4
 
-        if xyz_canonical is None or not self.use_voxel_deformer:
+        if xyz_canonical is None or not self.use_voxel_deformer:    # 初始化时为 True, 训练时为 False
             # forward theta only
             W = self.W
         else:

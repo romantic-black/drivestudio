@@ -78,7 +78,7 @@ class VanillaGaussians(nn.Module):
 
     def create_from_pcd(self, init_means: torch.Tensor, init_colors: torch.Tensor) -> None:
         self._means = Parameter(init_means)
-        
+        # 最近 3 个点的距离
         distances, _ = k_nearest_sklearn(self._means.data, 3)
         distances = torch.from_numpy(distances)
         # find the average of the three nearest neighbors for each point and use that as the scale
