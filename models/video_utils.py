@@ -117,7 +117,7 @@ def render(
     # misc
     cam_names, cam_ids = [], []
 
-    if compute_metrics:
+    if compute_metrics:     # True
         psnrs, ssim_scores, lpipss = [], [], []
         masked_psnrs, masked_ssims = [], []
         human_psnrs, human_ssims = [], []

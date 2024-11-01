@@ -34,9 +34,9 @@ def do_evaluation(
     trainer.set_eval()
 
     logger.info("Evaluating Pixels...")
-    if dataset.test_image_set is not None and cfg.render.render_test:
+    if dataset.test_image_set is not None and cfg.render.render_test:   # False
         logger.info("Evaluating Test Set Pixels...")
-        render_results = render_images(
+        render_results = render_images(     # 主测试流程
             trainer=trainer,
             dataset=dataset.test_image_set,
             compute_metrics=True,
@@ -91,7 +91,7 @@ def do_evaluation(
         del render_results, vis_frame_dict
         torch.cuda.empty_cache()
         
-    if cfg.render.render_full:
+    if cfg.render.render_full:  # True
         logger.info("Evaluating Full Set...")
         render_results = render_images(
             trainer=trainer,

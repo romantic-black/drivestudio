@@ -394,7 +394,7 @@ class RigidNodes(VanillaGaussians):
         else:
             rgbs = torch.sigmoid(colors[:, 0, :])
         
-            valid_mask = self.get_pts_valid_mask()
+        valid_mask = self.get_pts_valid_mask()
             
         activated_opacities = self.get_opacity * valid_mask.float().unsqueeze(-1)
         activated_scales = self.get_scaling
