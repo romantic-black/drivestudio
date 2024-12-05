@@ -1,0 +1,138 @@
+seed: 0
+dataset: waymo/3cams
+
+# ------------- Trainer ------------ #
+trainer:
+  type: models.trainers.MultiTrainer  # 使用多任务训练器
+  optim:
+    num_iters: 40000  # 总迭代次数
+    use_grad_scaler: false  # 是否使用梯度缩放
+    cache_buffer_freq: 2000  # 训练时每隔2000步更新缓存，适用于多于3个摄像头的情况
+  render:
+    near_plane: 0.1  # 渲染的近裁剪平面
+    far_plane: 10000000000.0  # 渲染的远裁剪平面
+    antialiased: false  # 是否启用抗锯齿
+    packed: false  # 是否使用打包渲染
+    absgrad: true  # 是否使用绝对梯度渲染
+    sparse_grad: false  # 是否使用稀疏梯度渲染
+    batch_size: 1  # 渲染的批次大小，目前仅支持1
+  losses:
+    rgb:
+      w: 0.8
+    ssim:
+      w: 0.2
+    mask:
+      w: 0.05
+      opacity_loss_type: bce # choose from [bce, safe_bce]
+    depth:
+      w: 0.01 # weight of depth loss
+      inverse_depth: False # whether to use inverse depth, NOTE that when set to True, must normalize=True
+      normalize: False # whether to normalize depth loss
+      loss_type: l1 # choose from ["l1", "l2"]
+    affine:
+      w: 0.00001 # weight of affine regularization
+  res_schedule:
+    double_steps: 250 # training starts at 1/d resolution, every n steps this is doubled
+    downscale_times: 2 # at the beginning, resolution is 1/2^d, where d is this number
+  gaussian_optim_general_cfg:
+    xyz:
+      lr: 1.6e-04
+      lr_final: 1.6e-06
+      scale_factor: scene_radius # str or float, if "scene_scale", scale the learning rate by the scene scale
+    sh_dc:
+      lr: 0.0025
+    sh_rest:
+      lr: 0.000125
+    opacity:
+      lr: 0.05
+    scaling:
+      lr: 0.005
+    rotation:
+      lr: 0.001
+  gaussian_ctrl_general_cfg:
+    warmup_steps: 500             # warmup steps for alpha
+    reset_alpha_interval: 3000    # reset alpha every n steps
+    refine_interval: 100          # refine gaussians every n steps
+    sh_degree_interval: 1000      # every n intervals turn on another sh degree
+    n_split_samples: 2            # number of samples to split gaussians into
+    # may differ in different models
+    reset_alpha_value: 0.01       # reset alpha to this value
+    densify_grad_thresh: 0.0005   # above this grad, gaussians are densified
+    densify_size_thresh: 0.003    # below this size, gaussians are *duplicated*, otherwise split
+    cull_alpha_thresh: 0.005      # threshold of opacity for culling gaussians
+    cull_scale_thresh: 0.5        # threshold of scale for culling gaussians
+    cull_screen_size: 0.15        # if a gaussian is more than this percent of screen space, cull it
+    split_screen_size: 0.05       # if a gaussian is more than this percent of screen space, split it
+    stop_screen_size_at: 4000     # stop culling/splitting at this step WRT screen size of gaussians
+    stop_split_at: 15000          # stop splitting at this step
+    sh_degree: 3                  # sh degree for gaussians
+
+# ------------- Model ------------ #
+model:
+  Background:
+    type: models.gaussians.VanillaGaussians
+    init:
+      from_lidar:
+        num_samples: 800_000
+        return_color: True
+      near_randoms: 100_000
+      far_randoms: 100_000
+    reg:
+      sharp_shape_reg:
+        w: 1.
+        step_interval: 10
+        max_gauss_ratio: 10.       # threshold of ratio of gaussian max to min scale before applying regularization loss from the PhysGaussian paper
+    optim:
+      ins_rotation:
+        lr: 0.00001
+        lr_final: 0.000005
+      ins_translation:
+        lr: 0.0005
+        lr_final: 0.0001
+  Sky:
+    type: models.modules.EnvLight
+    params:
+      resolution: 1024
+    optim:
+      all:
+        lr: 0.01
+  Affine:
+    type: models.modules.AffineTransform
+    params:
+      embedding_dim: 4
+      base_mlp_layer_width: 64
+      pixel_affine: False
+    optim:
+      all:
+        lr: 1.0e-5
+        weight_decay: 1.0e-6
+  CamPose:
+    type: models.modules.CameraOptModule
+    optim:
+      all:
+        lr: 1.0e-5
+        weight_decay: 1.0e-6
+
+# ------------- 渲染配置 ------------ #
+render:
+  fps: 10  # 主输出视频的帧率
+  render_full: True  # 是否渲染全分辨率视频
+  render_test: True  # 是否渲染测试集
+  render_novel:
+    traj_types:
+      - front_center_interp  # 新视图合成的轨迹类型
+    fps: 24  # 新视图渲染的帧率
+  vis_lidar: False  # 是否在真实图像上可视化激光雷达点
+  vis_sky: False  # 是否在渲染中包含天空的rgb数据
+  vis_error: False  # 是否在渲染中包含误差图
+
+# ------------- 日志配置 ------------ #
+logging:
+  vis_freq: 2000  # 训练可视化频率
+  print_freq: 500  # 训练打印频率
+  saveckpt_freq: 20000  # 检查点保存频率
+  save_seperate_video: True  # 是否为每个场景保存单独的视频
+
+
+my_config:
+  dataset_base_type: datasets.my_dataset.MyDataset

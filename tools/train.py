@@ -108,7 +108,10 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # build dataset
-    dataset = DrivingDataset(data_cfg=cfg.data)
+    if hasattr(cfg, "my_config"):
+        dataset = import_str(cfg.my_config.dataset_base_type)(data_cfg=cfg.data)
+    else:
+        dataset = DrivingDataset(data_cfg=cfg.data)
 
     # setup trainer
     trainer = import_str(cfg.trainer.type)(
