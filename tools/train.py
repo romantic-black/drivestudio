@@ -339,14 +339,14 @@ def main(args):
     
     logger.info("Training done!")
 
-    do_evaluation(
-        step=step,
-        cfg=cfg,
-        trainer=trainer,
-        dataset=dataset,
-        render_keys=render_keys,
-        args=args,
-    )
+    # do_evaluation(
+    #     step=step,
+    #     cfg=cfg,
+    #     trainer=trainer,
+    #     dataset=dataset,
+    #     render_keys=render_keys,
+    #     args=args,
+    # )
     
     if args.enable_viewer:
         print("Viewer running... Ctrl+C to exit.")
