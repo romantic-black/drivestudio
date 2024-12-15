@@ -193,7 +193,7 @@ def main(args):
         #----------------------------------------------------------------------------
         #----------------------------     Validate     ------------------------------
         # 该 if 块不重要, 跳过
-        if step % cfg.logging.vis_freq == 0 and cfg.logging.vis_freq > 0 and step >= 8000:
+        if step % cfg.logging.vis_freq == 0 and cfg.logging.vis_freq > 0 and step >= 10000:
             logger.info("Visualizing...")
             with torch.no_grad():
                 render_results = render_images(     # 只是渲染, 没有训练
