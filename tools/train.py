@@ -193,15 +193,8 @@ def main(args):
         #----------------------------------------------------------------------------
         #----------------------------     Validate     ------------------------------
         # 该 if 块不重要, 跳过
-        if step % cfg.logging.vis_freq == 0 and cfg.logging.vis_freq > 0:
+        if step % cfg.logging.vis_freq == 0 and cfg.logging.vis_freq > 0 and step >= 8000:
             logger.info("Visualizing...")
-            vis_timestep = np.linspace(
-                0,
-                dataset.num_img_timesteps,
-                trainer.num_iters // cfg.logging.vis_freq + 1,
-                endpoint=False,
-                dtype=int,
-            )[step // cfg.logging.vis_freq]
             with torch.no_grad():
                 render_results = render_images(     # 只是渲染, 没有训练
                     trainer=trainer,
@@ -213,6 +206,7 @@ def main(args):
             test_indices = dataset.test_indices
             for i, img in enumerate(render_results["rgbs"]):
                 img = to8b(img)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 idx = test_indices[i]
                 frame_id, cam_id = idx // dataset.num_cams, idx % dataset.num_cams
                 name = f"{dataset.scene_idx:03d}_{frame_id:03d}_{cam_id}_{step:05d}"

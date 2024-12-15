@@ -5,7 +5,7 @@ dataset: waymo/5cams
 trainer:
   type: models.trainers.MultiTrainer  # 使用多任务训练器
   optim:
-    num_iters: 10000  # 总迭代次数
+    num_iters: 40000  # 总迭代次数
     use_grad_scaler: false  # 是否使用梯度缩放
     cache_buffer_freq: 2000  # 训练时每隔2000步更新缓存，适用于多于3个摄像头的情况
   render:
@@ -128,9 +128,9 @@ render:
 
 # ------------- 日志配置 ------------ #
 logging:
-  vis_freq: 1000  # 训练可视化频率
-  print_freq: 1000  # 训练打印频率
-  saveckpt_freq: 1000  # 检查点保存频率
+  vis_freq: 5000  # 训练可视化频率
+  print_freq: 5000  # 训练打印频率
+  saveckpt_freq: 5000  # 检查点保存频率
   save_seperate_video: True  # 是否为每个场景保存单独的视频
 
 my_config:

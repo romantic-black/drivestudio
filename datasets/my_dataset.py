@@ -53,6 +53,10 @@ class MyDataset(DrivingDataset):
             sorted_segments = sorted(segments, key=len, reverse=True)
             train_segments = sorted_segments[:2]
             test_segments = sorted_segments[2:]
+        elif 8 >= kf_num > 5:
+            sorted_segments = sorted(segments, key=len, reverse=True)
+            train_segments = sorted_segments[:3]
+            test_segments = sorted_segments[3:]
         else:   # 随机选 60 当训练，40 当测试
             random.shuffle(segments)
             split_index = int(0.6 * kf_num) + 1
