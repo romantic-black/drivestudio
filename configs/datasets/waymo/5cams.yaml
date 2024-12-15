@@ -4,8 +4,8 @@
 #    0    front_camera       (1920, 1280)
 #    1    front_left_camera  (1920, 1280)
 #    2    front_right_camera (1920, 1280)
-#    3    left_camera        (1920, 866)
-#    4    right_camera       (1920, 866)
+#    3    left_camera        (1920, 886)
+#    4    right_camera       (1920, 886)
 
 data:
   data_root: data/waymo/processed/training # data root for the dataset
