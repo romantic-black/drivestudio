@@ -9,7 +9,9 @@ import logging
 import argparse
 
 import torch
+import cv2
 from tools.eval import do_evaluation
+from utils.visualization import to8b
 from utils.misc import import_str
 from utils.backup import backup_project
 from utils.logging import MetricLogger, setup_logging
@@ -55,7 +57,7 @@ def setup(args):
     # update config and create log dir
     cfg.log_dir = log_dir
     os.makedirs(log_dir, exist_ok=True)
-    for folder in ["images", "videos", "metrics", "configs_bk", "buffer_maps", "backup"]:
+    for folder in ["images", "videos", "metrics", "configs_bk", "buffer_maps", "backup", "test_images"]:
         os.makedirs(os.path.join(log_dir, folder), exist_ok=True)
     
     # setup wandb
@@ -203,39 +205,18 @@ def main(args):
             with torch.no_grad():
                 render_results = render_images(     # 只是渲染, 没有训练
                     trainer=trainer,
-                    dataset=dataset.full_image_set,
-                    compute_metrics=True,
+                    dataset=dataset.test_image_set,
+                    compute_metrics=False,
                     compute_error_map=cfg.render.vis_error,
-                    vis_indices=[
-                        vis_timestep * dataset.pixel_source.num_cams + i
-                        for i in range(dataset.pixel_source.num_cams)
-                    ],
+                    vis_indices=None,
                 )
-            if args.enable_wandb:
-                wandb.log(
-                    {
-                        "image_metrics/psnr": render_results["psnr"],
-                        "image_metrics/ssim": render_results["ssim"],
-                        "image_metrics/occupied_psnr": render_results["occupied_psnr"],
-                        "image_metrics/occupied_ssim": render_results["occupied_ssim"],
-                    }
-                )
-            vis_frame_dict = save_videos(
-                render_results,
-                save_pth=os.path.join(
-                    cfg.log_dir, "images", f"step_{step}.png"
-                ),  # don't save the video
-                layout=dataset.layout,
-                num_timestamps=1,
-                keys=render_keys,
-                save_seperate_video=cfg.logging.save_seperate_video,
-                num_cams=dataset.pixel_source.num_cams,
-                fps=cfg.render.fps,
-                verbose=False,
-            )
-            if args.enable_wandb:
-                for k, v in vis_frame_dict.items():
-                    wandb.log({"image_rendering/" + k: wandb.Image(v)})
+            test_indices = dataset.test_indices
+            for i, img in enumerate(render_results["rgbs"]):
+                img = to8b(img)
+                idx = test_indices[i]
+                frame_id, cam_id = idx // dataset.num_cams, idx % dataset.num_cams
+                name = f"{dataset.scene_idx:03d}_{frame_id:03d}_{cam_id}_{step:05d}"
+                cv2.imwrite(os.path.join(cfg.log_dir, "test_images", f"{name}.png"), img)
             del render_results
             torch.cuda.empty_cache()
                 

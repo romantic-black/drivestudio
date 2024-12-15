@@ -1,12 +1,14 @@
 import torch
 import numpy as np
 
-def split_trajectory(trajectory, num_splits=0):
+def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
     """
     Split trajectory into segments.
     Args:
         trajectory (torch.Tensor): Trajectory tensor of shape [frame_num, 4, 4].
         num_splits (int): Number of splits. If 0, the function will automatically determine the number of splits.
+        min_count (int): Minimum number of occurence of each split.
+        min_length (float): Minimum length of each split.
     Returns:
         segments (list): List of segments, each segment is a list of frame indices.
         ranges (torch.Tensor): Tensor of shape [num_splits, 2], each row is a range [start, end].
@@ -36,9 +38,10 @@ def split_trajectory(trajectory, num_splits=0):
             # 统计每个区段的帧数
             counts = torch.bincount(segment_indices, minlength=n)
 
-            # 检查是否所有区段都有至少一帧
-            if torch.all(counts > 0):
-                # 找到了最大的n，使得每个区段至少有一帧
+            # 检查是否所有区段都有至少一帧且长度满足最小长度
+            segment_lengths = segment_boundaries[1:] - segment_boundaries[:-1]
+            if torch.all(counts >= min_count) and torch.all(segment_lengths >= min_length):
+                # 找到了最大的n，使得每个区段至少有一帧且长度满足最小长度
                 num_splits = n
                 break
 
