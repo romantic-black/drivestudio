@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from itertools import product
+from numba import njit, prange
 
 def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
     """
@@ -60,5 +62,314 @@ def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
         segments[i] = indices
 
     return segments, ranges
- 
+
+
+class Grid2d:
+    def __init__(self, lidar_points, ground_mask, flow_class, gt_cameras, angle_resolution=36):
+        assert lidar_points.shape[1] == 3
+        self.lidar_points = lidar_points
+        self.ground_mask = ground_mask
+        self.flow_class = flow_class
+        self.angle_resolution = angle_resolution
+        p = self.lidar_points[~self.ground_mask]
+        c = self.flow_class[~self.ground_mask]
+        p = p[c <= 0]
+        self.obstacles = p
+        self.grounds = self.lidar_points[~self.ground_mask]
+
+        self.grid_size = 0.5
+        self.voxel_grid_2d, self.coord_range = create_voxel_grid_2d(p, self.grid_size)
+        self.grid_range = (0, self.voxel_grid_2d.shape[0], 0, self.voxel_grid_2d.shape[1])
+        self.voxel_dict = {
+            (i, j): {
+                "coord":self.grid_to_coord(i, j), 
+                "count":self.voxel_grid_2d[i, j],
+                "hit_angles": [],
+                }
+            for i in range(self.voxel_grid_2d.shape[0])
+            for j in range(self.voxel_grid_2d.shape[1])
+            if self.voxel_grid_2d[i, j]
+        }
+        cam2worlds = []
+        intrinsics = []
+        for cam in gt_cameras.values():
+            cam2worlds.append(cam.cam_to_worlds)
+            intrinsics.append(cam.intrinsics)
+        self.cam2worlds = torch.cat(cam2worlds, dim=0)
+        self.intrinsics = torch.cat(intrinsics, dim=0)
+        self.gt_camera_set = CameraSet(self.cam2worlds, self.intrinsics)
+        self.ray_casting_set(self.gt_camera_set)
+        
+        # 可行驶区域
+        self.gt_area_dict = {}
+        for cam in self.gt_camera_set:
+            x, y, angle, fov = cam.get_attr()
+            i, j = self.coord_to_grid(x, y)
+            theta = self.angle_to_theta(angle)
+            self.gt_area_dict[(i, j, theta)] = {
+                "coord": (x, y),
+                "fov": fov,
+            }
+        self.fov = fov
+
+        self.area = self.gt_area_dict.copy()
+
+    def angle_to_theta(self, angle):
+        angle = angle % (2 * np.pi)
+        theta = int(angle / (2 * np.pi / self.angle_resolution))
+        return theta
+    
+    def theta_to_angle(self, theta):
+        angle = theta * (2 * np.pi / self.angle_resolution)
+        angle = angle % (2 * np.pi)
+        return angle
+
+
+    def get_hot_map(self):
+        hot_map = torch.zeros_like(self.voxel_grid_2d)
+        hot_map[self.voxel_grid_2d > 0] = 1
+        hit = [[*indice] for indice in self.voxel_dict if len(self.voxel_dict[indice]["hit_angles"]) > 0]
+        print(hit)
+        if hit:  # 确保 hit 列表非空
+            hit_indices = torch.tensor(hit).long()  # 将hit转换为tensor
+            hot_map[hit_indices[:, 0], hit_indices[:, 1]] = 2  # 对应位置设为2
+            
+        return hot_map
+
+    def is_in_grid(self, i, j):
+        (i_min, i_max, j_min, j_max) = self.grid_range
+        return i_min <= i < i_max and j_min <= j < j_max
+    
+    def is_in_coord(self, x, y):
+        (x_min, x_max, y_min, y_max) = self.coord_range
+        return x_min <= x < x_max and y_min <= y < y_max
+
+
+    def grid_to_coord(self, i, j, center=True):
+        (x_min, x_max, y_min, y_max) = self.coord_range
+        if center:
+            return (x_min + i * self.grid_size + self.grid_size / 2, y_min + j * self.grid_size + self.grid_size / 2)
+        else:
+            return (x_min + i * self.grid_size, y_min + j * self.grid_size)
+    
+    def coord_to_grid(self, x, y):
+        (x_min, x_max, y_min, y_max) = self.coord_range
+        i = int((x - x_min) / self.grid_size)
+        j = int((y - y_min) / self.grid_size)
+        return (i, j)
+    
+
+    def ray_casting(self, camera, num_rays=100, max_distance=50, save_hit=True, get_coverage=False):
+        hit_points = []
+        coverages = []
+        cx, cy, angle = camera.cx, camera.cy, camera.angle
+        i1, j1 = self.coord_to_grid(cx, cy)
+        cx, cy = self.grid_to_coord(i1, j1)
+        assert self.is_in_grid(i1, j1)
+
+        start_angle = angle - camera.fov / 2
+        end_angle = angle + camera.fov / 2
+
+        angles = torch.linspace(start_angle, end_angle, steps=num_rays)
+
+
+        for ang in angles:
+            # 计算方向向量
+            dx = torch.cos(ang).item()
+            dy = torch.sin(ang).item()
+
+            # 计算终点（以最大距离为界）
+            x2 = cx + max_distance * dx
+            y2 = cy + max_distance * dy
+            i2, j2 = self.coord_to_grid(x2, y2)
+
+            line_points = self.bresenham_line(i1, j1, i2, j2)
+            hit_cell = None
+
+            for i, j in line_points:
+                if (i, j) in self.voxel_dict:
+                    hit_cell = (i, j)
+                    if save_hit:
+                        self.voxel_dict[(i, j)]["hit_angles"].append(ang)
+                    if get_coverage:
+                        coverage = self.get_voxel_coverage(i, j, ang)
+                        coverages.append(coverage)
+                    break
+            
+            if hit_cell:
+                hit_points.append(hit_cell)
+
+            if not hit_cell and get_coverage:
+                coverages.append(0)
+        if get_coverage:
+            return hit_points, coverages
+        else:
+            return hit_points
+
+    def ray_casting_set(self, camera_set):
+        for camera in camera_set:
+            self.ray_casting(camera)
+
+    def get_voxel_coverage(self, i, j, angle, sigma=np.pi/180):
+        if (i, j) not in self.voxel_dict:
+            return 0
+        if not self.voxel_dict[(i, j)]["hit_angles"]:
+            return 0
+        
+        hit_angles = self.voxel_dict[(i, j)]["hit_angles"]
+        hit_angles = np.array(hit_angles)
+
+        diff = np.abs(hit_angles - angle.item())
+        delta = np.minimum(diff, np.pi * 2 - diff)
+        delta = delta[delta < np.pi / 2]
+        if delta.size == 0:
+            return 0
+        coverage = np.sum(np.exp(- (delta**2) / (2 * sigma**2)))
+
+        # 限制coverage在0到1之间
+        coverage = np.clip(coverage, 0, 1)
+        return coverage
+    
+    def get_camera_coverage(self, camera):
+        hit_points, coverages = self.ray_casting(camera, save_hit=False, get_coverage=True)
+        return np.mean(coverages) if len(coverages) else 0
+    
+    def get_coverage(self, i, j, theta):
+        if (i, j) in self.voxel_dict:
+            return 0
+        cx, cy = self.grid_to_coord(i, j)
+        angle = self.theta_to_angle(theta)
+        fov = self.fov
+        fake_cam = Camera(None, None, cx=cx, cy=cy, angle=angle, fov=fov)
+        return self.get_camera_coverage(fake_cam)
+
+    def get_camera_set_coverage(self, camera_set):
+        coverages = []
+        for camera in camera_set:
+            coverages.append(self.get_camera_coverage(camera))
+        return coverages
+    
+    def get_area_coverage(self, area):
+        for i, j, theta in area:
+            coverage = self.get_coverage(i, j, theta)
+            self.area[(i, j, theta)]["coverage"] = coverage
+        return self.area
+    
+    def expand_area(self, iters=4):
+        delta = list(product((-iters,0 , iters), (-iters, iters), (-iters, iters)))
+        # 使用字典的副本进行迭代
+        original_area_keys = list(self.area.keys())
+        fov = self.fov
+        for i, j, theta in original_area_keys:
+            for di, dj, dtheta in delta:
+                i_, j_, theta_ = i + di, j + dj, theta + dtheta
+                if (i_, j_, theta_) in self.area:
+                    continue
+                if self.is_in_grid(i_, j_) and 0 <= theta_ < self.angle_resolution:
+                    self.area[(i_, j_, theta_)] = {
+                        "coord": self.grid_to_coord(i_, j_),
+                        "fov": fov,
+                    }
+        return self.area
+
+    def bresenham_line(self, x0, y0, x1, y1):
+        points = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        x, y = x0, y0
+        sx = -1 if x0 > x1 else 1
+        sy = -1 if y0 > y1 else 1
+
+        # 当以 x 为主轴遍历
+        if dx >= dy:
+            err = dx / 2
+            while x != x1:
+                if not self.is_in_grid(x, y):
+                    break
+                points.append((x, y))
+                x += sx
+                err -= dy
+                if err < 0:
+                    y += sy
+                    err += dx
+        else:
+            # 当以 y 为主轴遍历
+            err = dy / 2
+            while y != y1:
+                if not self.is_in_grid(x, y):
+                    break
+                points.append((x, y))
+                y += sy
+                err -= dx
+                if err < 0:
+                    x += sx
+                    err += dy
+        return points
+
+class Camera:
+    def __init__(self, camera_to_world=None, intrinsic=None, cx=None, cy=None, angle=None, fov=None):
+        if cx is None:
+            assert camera_to_world.shape == (4, 4)
+            assert intrinsic.shape == (3, 3)
+            
+            self.camera_to_world = camera_to_world
+            self.intrinsic = intrinsic
+            self.fov = 2 * torch.atan2(intrinsic[0, 2], intrinsic[0, 0])
+            self.cx = camera_to_world[0, 3]
+            self.cy = camera_to_world[1, 3]
+            self.angle = torch.atan2(camera_to_world[1, 0], camera_to_world[0, 0])
+        else:
+            self.cx = cx
+            self.cy = cy
+            self.angle = angle
+            self.fov = fov
+
+
+    def get_attr(self):
+        return self.cx, self.cy, self.angle, self.fov
+
+
+class CameraSet:
+    def __init__(self, camera_to_worlds, intrinsics):
+        self.camera_to_worlds = camera_to_worlds
+        self.intrinsics = intrinsics
+        # 向量化
+        self.fovs = torch.atan2(intrinsics[:, 0, 2], intrinsics[:, 0, 0])
+        self.cxs = camera_to_worlds[:, 0, 3]
+        self.cys = camera_to_worlds[:, 1, 3]
+        self.angles = torch.atan2(camera_to_worlds[:, 1, 0], camera_to_worlds[:, 0, 0])
+    
+    def __len__(self):
+        return self.fovs.shape[0]
+    
+    def __getitem__(self, index):
+        return Camera(self.camera_to_worlds[index], self.intrinsics[index])
+
+
+
+def create_voxel_grid_2d(lidar_points, voxel_size=0.5):
+    z = lidar_points[:, 2]
+    lidar_points = lidar_points[(-1 <= z) & (z <= 3)]
+    x_min, x_max = lidar_points[:, 0].min(), lidar_points[:, 0].max()
+    y_min, y_max = lidar_points[:, 1].min(), lidar_points[:, 1].max()
+    
+    grid_size_x = int((x_max - x_min) / voxel_size) + 1
+    grid_size_y = int((y_max - y_min) / voxel_size) + 1
+    
+    voxel_grid = torch.zeros((grid_size_x, grid_size_y), dtype=torch.int32)
+    
+    # 计算每个点的体素索引
+    voxel_indices_x = ((lidar_points[:, 0] - x_min) / voxel_size).long()
+    voxel_indices_y = ((lidar_points[:, 1] - y_min) / voxel_size).long()
+    
+    # 将二维索引展平成一维索引
+    flat_indices = voxel_indices_x * grid_size_y + voxel_indices_y
+    
+    # 使用 torch.bincount 统计每个体素的点数量
+    counts = torch.bincount(flat_indices, minlength=grid_size_x * grid_size_y)
+    
+    # 将一维结果重塑为二维网格
+    voxel_grid = counts.view(grid_size_x, grid_size_y)
+    
+    return voxel_grid, (x_min, x_max, y_min, y_max)
 

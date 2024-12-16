@@ -128,10 +128,7 @@ render:
 
 # ------------- 日志配置 ------------ #
 logging:
-  vis_freq: 5000  # 训练可视化频率
-  print_freq: 5000  # 训练打印频率
-  saveckpt_freq: 5000  # 检查点保存频率
+  vis_freq: 10000  # 训练可视化频率
+  print_freq: 10000  # 训练打印频率
+  saveckpt_freq: 10000  # 检查点保存频率
   save_seperate_video: True  # 是否为每个场景保存单独的视频
-
-my_config:
-  dataset_base_type: datasets.my_dataset.MyDataset
