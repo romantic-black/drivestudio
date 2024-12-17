@@ -148,7 +148,7 @@ def compute_area_coverage(voxel_indices, voxel_hit_angles, coord_range, grid_ran
                 if len(voxel_index) == 0:
                     continue
                 else:
-                    voxel_coverage = compute_voxel_coverage(ang, voxel_hit_angles=voxel_hit_angles[voxel_index])
+                    voxel_coverage = compute_voxel_coverage(ang, voxel_hit_angles=voxel_hit_angles[voxel_index].reshape(-1))
                     coverage[idx] = voxel_coverage
                     break
             
@@ -165,7 +165,10 @@ def compute_voxel_coverage(ang, voxel_hit_angles, sigma=np.pi/180):
     if delta.size == 0:
         return 0
     coverage = np.sum(np.exp(- (delta**2) / (2 * sigma**2)))
-    coverage = np.clip(coverage, 0, 1)
+    if coverage > 1.0:
+        coverage = 1.0
+    elif coverage < 0.0:
+        coverage = 0.0
     return coverage
 
 
@@ -514,3 +517,37 @@ def create_voxel_grid_2d(lidar_points, voxel_size=0.5):
     
     return voxel_grid, (x_min, x_max, y_min, y_max)
 
+if __name__ == '__main__':
+    from typing import List, Optional
+    from omegaconf import OmegaConf
+    import os
+    import time
+    import json
+    import wandb
+    import logging
+    import argparse
+
+    import torch
+    import numpy as np
+    from datasets.driving_dataset import DrivingDataset
+    from datasets.my_dataset import MyDataset
+    from utils.misc import import_str
+    from models.trainers import BasicTrainer
+    from models.video_utils import (
+        render_images,
+        save_videos,
+        render_novel_views
+    )
+    
+    cfg = OmegaConf.load(os.path.join("/mnt/e/Output/cam5/149", "config.yaml"))
+    dataset = MyDataset(cfg.data)
+    source = dataset.lidar_source
+    points = source.origins + source.directions * source.ranges
+    grounds = source.grounds
+    flow_class = source.flow_classes
+
+    cameras = dataset.pixel_source.camera_data
+
+    grid = Grid2d(points, grounds, flow_class, cameras)
+
+    grid_numba = Grid2dNumba(grid, radius=8)
