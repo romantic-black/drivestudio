@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 from itertools import product
-from numba import njit, prange
-from grid_numba import Grid2dNumba
+from utils.grid_numba import Grid2dNumba
 
 
 def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
@@ -103,18 +102,8 @@ class Grid2d:
         self.intrinsics = torch.cat(intrinsics, dim=0)
         self.gt_camera_set = CameraSet(self.cam2worlds, self.intrinsics)
         self.ray_casting_set(self.gt_camera_set)
-        
-        # 可行驶区域
-        self.gt_area_dict = {}
-        for cam in self.gt_camera_set:
-            x, y, angle, fov = cam.get_attr()
-            i, j = self.coord_to_grid(x, y)
-            theta = self.angle_to_theta(angle)
-            self.gt_area_dict[(i, j, theta)] = {
-                "coord": (x, y),
-                "fov": fov,
-            }
-        self.fov = fov
+        self.fov = self.gt_camera_set.fovs[0]
+
 
     def angle_to_theta(self, angle):
         angle = angle % (2 * np.pi)
@@ -131,7 +120,6 @@ class Grid2d:
         hot_map = torch.zeros_like(self.voxel_grid_2d)
         hot_map[self.voxel_grid_2d > 0] = 1
         hit = [[*indice] for indice in self.voxel_dict if len(self.voxel_dict[indice]["hit_angles"]) > 0]
-        print(hit)
         if hit:  # 确保 hit 列表非空
             hit_indices = torch.tensor(hit).long()  # 将hit转换为tensor
             hot_map[hit_indices[:, 0], hit_indices[:, 1]] = 2  # 对应位置设为2
@@ -161,7 +149,7 @@ class Grid2d:
         return (i, j)
     
 
-    def ray_casting(self, camera, num_rays=100, max_distance=50, save_hit=True, get_coverage=False):
+    def ray_casting(self, camera, num_rays=20, max_distance=50, save_hit=True, get_coverage=False):
         hit_points = []
         coverages = []
         cx, cy, angle = camera.cx, camera.cy, camera.angle
@@ -235,44 +223,14 @@ class Grid2d:
     def get_camera_coverage(self, camera):
         hit_points, coverages = self.ray_casting(camera, save_hit=False, get_coverage=True)
         return np.mean(coverages) if len(coverages) else 0
-    
-    def get_coverage(self, i, j, theta):
-        if (i, j) in self.voxel_dict:
-            return 0
-        cx, cy = self.grid_to_coord(i, j)
-        angle = self.theta_to_angle(theta)
-        fov = self.fov
-        fake_cam = Camera(None, None, cx=cx, cy=cy, angle=angle, fov=fov)
-        return self.get_camera_coverage(fake_cam)
+
 
     def get_camera_set_coverage(self, camera_set):
         coverages = []
         for camera in camera_set:
             coverages.append(self.get_camera_coverage(camera))
         return coverages
-    
-    def get_area_coverage(self, area):
-        for i, j, theta in area:
-            coverage = self.get_coverage(i, j, theta)
-            self.area[(i, j, theta)]["coverage"] = coverage
-        return self.area
-    
-    def expand_area(self, iters=4):
-        delta = list(product((-iters,0 , iters), (-iters, iters), (-iters, iters)))
-        # 使用字典的副本进行迭代
-        original_area_keys = list(self.area.keys())
-        fov = self.fov
-        for i, j, theta in original_area_keys:
-            for di, dj, dtheta in delta:
-                i_, j_, theta_ = i + di, j + dj, theta + dtheta
-                if (i_, j_, theta_) in self.area:
-                    continue
-                if self.is_in_grid(i_, j_) and 0 <= theta_ < self.angle_resolution:
-                    self.area[(i_, j_, theta_)] = {
-                        "coord": self.grid_to_coord(i_, j_),
-                        "fov": fov,
-                    }
-        return self.area
+
 
     def bresenham_line(self, x0, y0, x1, y1):
         points = []
@@ -336,7 +294,7 @@ class CameraSet:
         self.camera_to_worlds = camera_to_worlds
         self.intrinsics = intrinsics
         # 向量化
-        self.fovs = torch.atan2(intrinsics[:, 0, 2], intrinsics[:, 0, 0])
+        self.fovs = 2 * torch.atan2(intrinsics[:, 0, 2], intrinsics[:, 0, 0])
         self.cxs = camera_to_worlds[:, 0, 3]
         self.cys = camera_to_worlds[:, 1, 3]
         self.angles = torch.atan2(camera_to_worlds[:, 1, 0], camera_to_worlds[:, 0, 0])
