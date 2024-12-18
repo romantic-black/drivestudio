@@ -55,12 +55,14 @@ class Grid2dNumba:
         for i in range(x.shape[0]):
             # 计算每个pose到所有indices的距离
             distances = np.linalg.norm(indices - np.array([x[i], y[i]]), axis=1)  # 确保 distances 是一维数组
-            mask = distances <= self.radius  # 直接使用布尔数组
+            mask = distances <= self.radius / self.grid_size  # 直接使用布尔数组
             self.area_indices = np.concatenate([self.area_indices, indices[mask]], axis=0)
 
         # 确保使用正确的 indices 变量
         self.indices = np.array([(x, y, angle) for x, y in self.area_indices for angle in theta]).astype(int)
         self.indices = np.unique(self.indices, axis=0)
+
+        self.hit_angles = self.hit_angles % 2 * np.pi
 
 
 
@@ -75,26 +77,51 @@ class Grid2dNumba:
         return i, j
 
     def get_area_coverage(self):
-        return compute_area_coverage(self.hit_angles, np.array(self.coord_range),
+        self.area_coverage = compute_area_coverage(self.hit_angles, np.array(self.coord_range),
                                      np.array(self.grid_range), self.indices, self.fov, self.grid_size,
-                                     self.starts, self.counts)
+                                     self.starts, self.counts, self.angle_resolution)
+        return self.area_coverage
+    
+    def get_shown_map(self):
+        canvas = np.zeros((self.voxel_grid_2d.shape[0], self.voxel_grid_2d.shape[1]))
+        count = np.zeros((self.voxel_grid_2d.shape[0], self.voxel_grid_2d.shape[1]))
+        for idx, (i, j, theta) in enumerate(self.indices):
+            cov = self.area_coverage[idx]
+            # 取均值
+            canvas[i, j] += cov
+            count[i, j] += 1
+        canvas = np.where(count > 0, canvas / count, 0)
+        return canvas
+
+    def get_shown_map_base_on_angel(self, theta):
+        canvas = np.zeros((self.voxel_grid_2d.shape[0], self.voxel_grid_2d.shape[1]))
+        for idx, (i, j, theta_) in enumerate(self.indices):
+            if theta_ == theta:
+                cov = self.area_coverage[idx]
+                canvas[i, j] = cov
+        return canvas
+        
 
 
 @njit
 def compute_area_coverage(voxel_hit_angles, coord_range, grid_range, indices, fov, grid_size,
-                          starts, counts, num_rays=100, max_distance=50):
+                          starts, counts, angle_resolution, num_rays=20, max_distance=50):
     # 提前计算好射线的相对角度
     area_coverage = np.zeros(len(indices))
     (x_min, x_max, y_min, y_max) = coord_range
     (i_min, i_max, j_min, j_max) = grid_range
     show_freq = 1000
 
-
     for a_idx in range(len(indices)):
 
         i, j, theta = indices[a_idx]
-        start_angle = theta - fov / 2
-        end_angle = theta + fov / 2
+        angle = theta * (2 * np.pi / angle_resolution)
+        angle = angle % (2 * np.pi)
+        start_angle = angle - fov / 2
+        end_angle = angle + fov / 2
+
+        start_angle = start_angle % (2 * np.pi)
+        end_angle = end_angle % (2 * np.pi)
 
         cx = x_min + i * grid_size + grid_size / 2
         cy = y_min + j * grid_size + grid_size / 2
@@ -139,18 +166,18 @@ def compute_area_coverage(voxel_hit_angles, coord_range, grid_range, indices, fo
 
 
 @njit
-def compute_voxel_coverage(ang, voxel_hit_angles, sigma=np.pi/20):
+def compute_voxel_coverage(ang, voxel_hit_angles, sigma=np.pi/6, weight=0.1):
     # 假设已无nan
+    ang = ang % (2 * np.pi)
     diff = np.abs(voxel_hit_angles - ang)
     delta = np.minimum(diff, np.pi * 2 - diff)
-    # 只考虑 delta < π/2
     count = 0
     total = 0.0
-    half_pi = np.pi/2
+    threshold = np.pi/9
     for d in delta:
-        if d < half_pi:
+        if d < threshold:
             val = np.exp(- (d*d) / (2 * sigma * sigma))
-            total += val
+            total += val * weight
             count += 1
     if count == 0:
         return 0.0
