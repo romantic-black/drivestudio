@@ -58,8 +58,10 @@ class Grid2dNumba:
             mask = distances <= self.radius / self.grid_size  # 直接使用布尔数组
             self.area_indices = np.concatenate([self.area_indices, indices[mask]], axis=0)
 
-        # area_indices 中 不能包含 voxel_indices 的点
-        self.area_indices = np.setdiff1d(self.area_indices, self.voxel_indices)
+        # area_indices 中 不能包含 voxel_indices 的点, 注意二者都是[n,2]
+        voxel_indices_set = set(map(tuple, self.voxel_indices))
+        mask = np.array([tuple(pt) not in voxel_indices_set for pt in self.area_indices])
+        self.area_indices = self.area_indices[mask]
 
         # 确保使用正确的 indices 变量
         self.indices = np.array([(x, y, angle) for x, y in self.area_indices for angle in theta]).astype(int)
