@@ -4,6 +4,58 @@ from itertools import product
 from utils.grid_numba import Grid2dNumba
 
 
+def farthest_point_sampling(points, K, angle_resolution=36, pos_range=40):
+    """
+    使用最远点采样从点集中采样 K 个点的索引和子集。
+    points: [N, 3] 的张量, 列为 (x,y,a)，其中 a 是 [0,35] 的离散角度索引
+    K:      需要采样的点数
+
+    返回:
+    farthest_indices: [K] 的 LongTensor，为选中点的索引
+    sampled_points:   [K, 3] 的张量，为选中点的集合
+    """
+    device = points.device
+    N = points.shape[0]
+    if K >= N:
+        return torch.arange(N, device=device), points
+
+    # 提取 x, y, a
+    x = points[:, 0] / pos_range
+    y = points[:, 1] / pos_range
+    a = points[:, 2]
+
+    # 将 a 转换为弧度
+    # a 的取值 0~35, 对应角度为 a * 10 度
+    # 弧度 = 角度 * π/180 = (a*10)*π/180 = a * (π/18)
+    angle_rad = a * (2 * torch.pi / angle_resolution)
+    cos_a = torch.cos(angle_rad)
+    sin_a = torch.sin(angle_rad)
+
+    # 构造用于距离计算的特征空间 (x, y, cos_a, sin_a)
+    coords = torch.stack([x, y, cos_a, sin_a], dim=1)  # [N,4]
+
+    # 初始化：随机选择一个点作为第一个中心点
+    farthest_indices = torch.zeros(K, dtype=torch.long, device=device)
+    farthest_indices[0] = torch.randint(0, N, (1,), device=device)
+
+    # dist 记录每个点与已选中心点集合中最近的中心点的距离
+    dist = torch.full((N,), float('inf'), device=device)
+
+    # 更新距离：计算每个点到第一个已选中点的距离
+    initial_center = coords[farthest_indices[0]].unsqueeze(0)  # [1,4]
+    dist = torch.sum((coords - initial_center) ** 2, dim=-1)  # [N]
+
+    for i in range(1, K):
+        # 选择距离最远的点作为下一个中心点
+        farthest_indices[i] = torch.argmax(dist)
+        new_center = coords[farthest_indices[i]].unsqueeze(0)  # [1,4]
+        new_dist = torch.sum((coords - new_center) ** 2, dim=-1)
+        dist = torch.minimum(dist, new_dist)
+
+    sampled_points = points[farthest_indices]
+    return farthest_indices, sampled_points
+
+
 def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
     """
     Split trajectory into segments.

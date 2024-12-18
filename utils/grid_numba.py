@@ -4,7 +4,7 @@ from numba import njit, prange
 
 
 class Grid2dNumba:
-    def __init__(self, grid, radius=8, step=1, angle_step=1):
+    def __init__(self, grid, radius=8, step=0.5, angle_step=1):
         self.voxel_grid_2d = grid.voxel_grid_2d.numpy()
         (x_min, x_max, y_min, y_max) = grid.coord_range
 
@@ -57,6 +57,9 @@ class Grid2dNumba:
             distances = np.linalg.norm(indices - np.array([x[i], y[i]]), axis=1)  # 确保 distances 是一维数组
             mask = distances <= self.radius / self.grid_size  # 直接使用布尔数组
             self.area_indices = np.concatenate([self.area_indices, indices[mask]], axis=0)
+
+        # area_indices 中 不能包含 voxel_indices 的点
+        self.area_indices = np.setdiff1d(self.area_indices, self.voxel_indices)
 
         # 确保使用正确的 indices 变量
         self.indices = np.array([(x, y, angle) for x, y in self.area_indices for angle in theta]).astype(int)
