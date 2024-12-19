@@ -41,3 +41,6 @@ data:
     # 2) 使用 lidar_percentile 指定的百分位数，从下采样的激光雷达点计算 AABB
     lidar_downsample_factor: 4 # 通过此因子下采样激光雷达以计算百分位数
     lidar_percentile: 0.02  # 用于从激光雷达计算 AABB 的百分位数
+  my_config:
+    split_key_frame: False
+    fake_gt_root: data/waymo/processed/fake

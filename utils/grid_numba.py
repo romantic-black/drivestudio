@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import cv2
 from numba import njit, prange
 
 
@@ -58,8 +59,15 @@ class Grid2dNumba:
             mask = distances <= self.radius / self.grid_size  # 直接使用布尔数组
             self.area_indices = np.concatenate([self.area_indices, indices[mask]], axis=0)
 
+        grid_map = (grid.voxel_grid_2d > 0).numpy().astype(np.uint8)
+        # 形态学处理
+        grid_map = cv2.morphologyEx(grid_map, cv2.MORPH_CLOSE, np.ones((5, 5), dtype=np.uint8))
+        
+        # 取索引
+        self.expand_voxel_indices = np.array(np.where(grid_map > 0)).T
+
         # area_indices 中 不能包含 voxel_indices 的点, 注意二者都是[n,2]
-        voxel_indices_set = set(map(tuple, self.voxel_indices))
+        voxel_indices_set = set(map(tuple, self.expand_voxel_indices))
         mask = np.array([tuple(pt) not in voxel_indices_set for pt in self.area_indices])
         self.area_indices = self.area_indices[mask]
 
@@ -178,7 +186,7 @@ def compute_voxel_coverage(ang, voxel_hit_angles, sigma=np.pi/6, weight=0.1):
     delta = np.minimum(diff, np.pi * 2 - diff)
     count = 0
     total = 0.0
-    threshold = np.pi/9
+    threshold = np.pi/3
     for d in delta:
         if d < threshold:
             val = np.exp(- (d*d) / (2 * sigma * sigma))
@@ -186,7 +194,8 @@ def compute_voxel_coverage(ang, voxel_hit_angles, sigma=np.pi/6, weight=0.1):
             count += 1
     if count == 0:
         return 0.0
-    coverage = total  # 因为每个命中角度最大记1，相加后若>1截断
+    diversity = np.std(voxel_hit_angles) / np.pi  # 分布多样性因子
+    coverage = total * diversity  # 因为每个命中角度最大记1，相加后若>1截断
     if coverage > 1.0:
         coverage = 1.0
     return coverage

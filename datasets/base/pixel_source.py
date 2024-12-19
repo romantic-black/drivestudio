@@ -629,20 +629,20 @@ class CameraData(object):
         viewdirs = viewdirs.reshape(img_height, img_width, 3)
         direction_norm = direction_norm.reshape(img_height, img_width, 1)
         _image_infos = {
-            "origins": origins,
-            "viewdirs": viewdirs,
-            "direction_norm": direction_norm,
-            "pixel_coords": pixel_coords,
-            "normed_time": normalized_time,
-            "img_idx": image_id,
-            "frame_idx": frame_id,
-            "pixels": rgb,
-            "sky_masks": sky_mask,
+            "origins": origins,                     # ok
+            "viewdirs": viewdirs,                   # ok
+            "direction_norm": direction_norm,       # ok
+            "pixel_coords": pixel_coords,           # ok
+            "normed_time": normalized_time,         # ok
+            "img_idx": image_id,                    # None
+            "frame_idx": frame_id,                  # None
+            "pixels": rgb,                          # ok
+            "sky_masks": sky_mask,                  # ok
             "dynamic_masks": dynamic_mask,
-            "human_masks": human_mask,
-            "vehicle_masks": vehicle_mask,
-            "egocar_masks": egocar_mask,
-            "lidar_depth_map": lidar_depth_map,
+            "human_masks": human_mask,              # None
+            "vehicle_masks": vehicle_mask,          # None
+            "egocar_masks": egocar_mask,            # None
+            "lidar_depth_map": lidar_depth_map,     # None
         }
         image_infos = {k: v for k, v in _image_infos.items() if v is not None}
         

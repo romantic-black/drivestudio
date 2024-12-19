@@ -4,7 +4,7 @@ from itertools import product
 from utils.grid_numba import Grid2dNumba
 
 
-def farthest_point_sampling(points, K, angle_resolution=36, pos_range=40):
+def farthest_point_sampling(points, K, angle_resolution=36, pos_range=10):
     """
     使用最远点采样从点集中采样 K 个点的索引和子集。
     points: [N, 3] 的张量, 列为 (x,y,a)，其中 a 是 [0,35] 的离散角度索引
@@ -199,6 +199,53 @@ class Grid2d:
         i = int(torch.round((x - x_min) / self.grid_size))
         j = int(torch.round((y - y_min) / self.grid_size))
         return (i, j)
+    
+    def to_camera_pose(self, indices):
+        base_camera = self.gt_camera_set
+
+        gt_xy = self.gt_camera_set.camera_to_worlds[:, :2, 3]
+
+        cam2worlds = []
+        intrinsics = []
+
+        for idx, (i, j, theta) in enumerate(indices):
+            x, y = self.grid_to_coord(i, j)
+            angle = self.theta_to_angle(theta)
+
+            # 取最近的gt, 使用torch.norm
+            gt_indice = torch.argmin(torch.norm(gt_xy - torch.tensor([x, y]), dim=1))
+            base_cam2world = self.gt_camera_set.camera_to_worlds[gt_indice]
+            base_intrinsic = self.gt_camera_set.intrinsics[gt_indice]
+            base_angle = self.gt_camera_set.angles[gt_indice]
+
+            R_base_to_0 = torch.tensor([
+                [torch.cos(-base_angle), -torch.sin(-base_angle), 0],
+                [torch.sin(-base_angle), torch.cos(-base_angle),  0],
+                [0,                     0,                       1]
+            ], device=base_cam2world.device, dtype=base_cam2world.dtype)
+
+            cam2world = base_cam2world.clone()
+
+            # 计算绕 Z 轴的新旋转矩阵 R_z
+            R_z = torch.tensor([
+                [torch.cos(angle), -torch.sin(angle), 0],
+                [torch.sin(angle), torch.cos(angle),  0],
+                [0,                0,                 1]
+            ], device=cam2world.device, dtype=cam2world.dtype)
+
+            # 更新 cam2world 的旋转部分和位移部分
+            cam2world[:3, :3] = R_z @ R_base_to_0 @ base_cam2world[:3, :3]
+            cam2world[0, 3] = x      # 设置平移部分 x
+            cam2world[1, 3] = y      # 设置平移部分 y
+
+            intrinsic = base_intrinsic.clone()
+
+            cam2worlds.append(cam2world)
+            intrinsics.append(intrinsic)
+
+        cam2worlds = torch.stack(cam2worlds, dim=0)
+        intrinsics = torch.stack(intrinsics, dim=0)
+        return cam2worlds, intrinsics
     
 
     def ray_casting(self, camera, num_rays=20, max_distance=50, save_hit=True, get_coverage=False):

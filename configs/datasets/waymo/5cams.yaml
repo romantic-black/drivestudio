@@ -41,3 +41,6 @@ data:
     # 2) compute aabb from the downsampled lidar points by using the percentile of lidar_percentiles 
     lidar_downsample_factor: 4 # downsample lidar by this factor to compute percentile
     lidar_percentile: 0.02  # percentile to compute aabb from lidar
+  my_config:
+    split_key_frame: False
+    fake_gt_root: data/waymo/processed/fake
