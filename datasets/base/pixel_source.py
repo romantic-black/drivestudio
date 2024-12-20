@@ -638,7 +638,7 @@ class CameraData(object):
             "frame_idx": frame_id,                  # None
             "pixels": rgb,                          # ok
             "sky_masks": sky_mask,                  # ok
-            "dynamic_masks": dynamic_mask,
+            "dynamic_masks": dynamic_mask,          # None
             "human_masks": human_mask,              # None
             "vehicle_masks": vehicle_mask,          # None
             "egocar_masks": egocar_mask,            # None
@@ -647,8 +647,8 @@ class CameraData(object):
         image_infos = {k: v for k, v in _image_infos.items() if v is not None}
         
         cam_infos = {
-            "cam_id": camera_id,
-            "cam_name": self.cam_name,
+            "cam_id": camera_id,                    # None
+            "cam_name": self.cam_name,              # None
             "camera_to_world": c2w,
             "height": torch.tensor(img_height, dtype=torch.long, device=c2w.device),
             "width": torch.tensor(img_width, dtype=torch.long, device=c2w.device),
