@@ -10,6 +10,7 @@ import argparse
 
 import torch
 import cv2
+
 from tools.eval import do_evaluation
 from utils.visualization import to8b
 from utils.misc import import_str
@@ -17,6 +18,7 @@ from utils.backup import backup_project
 from utils.logging import MetricLogger, setup_logging
 from models.video_utils import render_images, save_videos
 from datasets.driving_dataset import DrivingDataset
+from datasets.my_dataset import MyDataset
 
 logger = logging.getLogger()
 current_time = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
@@ -112,6 +114,9 @@ def main(args):
     # build dataset
     if hasattr(cfg, "my_config"):
         dataset = import_str(cfg.my_config.dataset_base_type)(data_cfg=cfg.data)
+        image_info_list = torch.load("notebook/data/image_info_list.pth")
+        cam_info_list = torch.load("notebook/data/cam_info_list.pth")
+        dataset.load_fake_gt(image_info_list, cam_info_list, True)
     else:
         dataset = DrivingDataset(data_cfg=cfg.data)
 
@@ -146,7 +151,7 @@ def main(args):
     if args.enable_viewer:
         # a simple viewer for background visualization
         trainer.init_viewer(port=args.viewer_port)
-    
+    trainer.init_viewer(port=8080)
     # define render keys
     render_keys = [
         "gt_rgbs",
@@ -223,8 +228,13 @@ def main(args):
         trainer.optimizer_zero_grad() # zero grad
         
         # get data
-        train_step_camera_downscale = trainer._get_downscale_factor()
-        image_infos, cam_infos = dataset.train_image_set.next(train_step_camera_downscale)
+        use_fake_gt = random.random() < 0.
+        if use_fake_gt:
+            image_infos, cam_infos = dataset.fake_gt_next()
+        else:
+            train_step_camera_downscale = trainer._get_downscale_factor()
+            image_infos, cam_infos = dataset.train_image_set.next(train_step_camera_downscale)
+
         for k, v in image_infos.items():
             if isinstance(v, torch.Tensor):
                 image_infos[k] = v.cuda(non_blocking=True)
@@ -233,7 +243,7 @@ def main(args):
                 cam_infos[k] = v.cuda(non_blocking=True)
         
         # forward & backward
-        outputs = trainer(image_infos, cam_infos)
+        outputs = trainer(image_infos, cam_infos, False)
         trainer.update_visibility_filter()
 
         loss_dict = trainer.compute_losses(
