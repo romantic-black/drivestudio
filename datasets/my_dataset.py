@@ -1,4 +1,4 @@
-from oauthlib.uri_validate import segment
+
 from omegaconf import OmegaConf
 from datasets.driving_dataset import DrivingDataset
 from utils.mytools import split_trajectory
@@ -6,16 +6,28 @@ from typing import Dict
 from torch import Tensor
 import numpy as np
 import random
+from utils.mytools import Grid2d,Grid2dNumba,farthest_point_sampling
+
 
 class MyDataset(DrivingDataset):
 
     def __init__(self, data_cfg:OmegaConf,):
         super().__init__(data_cfg)
         self.data_cfg = data_cfg
+        self.fake_image_infos = []
+        self.fake_cam_infos = []
 
+    def load_fake_gt(self, fake_image_infos, fake_cam_infos, remove_old=False):
+        assert len(fake_image_infos) == len(fake_cam_infos)
+        if remove_old:
+            self.fake_image_infos = []
+            self.fake_cam_infos = []
+        self.fake_image_infos.extend(fake_image_infos)
+        self.fake_cam_infos.extend(fake_cam_infos)
 
-    def load_fake_gt(self):
-        pass
+    def fake_gt_next(self):
+        index = random.randint(0, len(self.fake_image_infos) - 1)
+        return self.fake_image_infos[index], self.fake_cam_infos[index]
 
     def split_train_test(self):
         if self.data_cfg.my_config.split_key_frame:
@@ -65,5 +77,23 @@ class MyDataset(DrivingDataset):
             # but train_timesteps are timesteps, so the length is num_train_timesteps (len(unique_train_timestamps))
             return train_timesteps, test_timesteps, train_indices, test_indices
         else:
-            super(MyDataset, self).split_train_test()
+            return super().split_train_test()
     
+def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, max_coverage=0.8):
+    source = dataset.lidar_source
+    points = source.origins + source.directions * source.ranges
+    grounds = source.grounds
+    flow_class = source.flow_classes
+
+    cameras = dataset.pixel_source.camera_data
+
+    grid = Grid2d(points, grounds, flow_class, cameras)
+    grid_numba = Grid2dNumba(grid, radius=5)
+    area_coverage = grid_numba.get_area_coverage()
+
+    mask = (grid_numba.area_coverage > min_coverage) & (grid_numba.area_coverage < max_coverage)
+    chosen_indices_ = grid_numba.indices[mask]
+    _, chosen_indices = farthest_point_sampling(Tensor(chosen_indices_), num_points)
+
+    cam2worlds, intrinsics = grid.to_camera_pose(chosen_indices)
+    return cam2worlds, intrinsics

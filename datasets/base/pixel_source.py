@@ -642,7 +642,7 @@ class CameraData(object):
             "human_masks": human_mask,              # None
             "vehicle_masks": vehicle_mask,          # None
             "egocar_masks": egocar_mask,            # None
-            "lidar_depth_map": lidar_depth_map,     # None
+            "lidar_depth_map": lidar_depth_map,     # ok
         }
         image_infos = {k: v for k, v in _image_infos.items() if v is not None}
         

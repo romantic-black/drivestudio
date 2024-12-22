@@ -132,3 +132,10 @@ logging:
   print_freq: 10000  # 训练打印频率
   saveckpt_freq: 10000  # 检查点保存频率
   save_seperate_video: True  # 是否为每个场景保存单独的视频
+
+my_config:
+  dataset_base_type: datasets.my_dataset.MyDataset
+  fake_gt_add_freq: 12000
+  fake_width: 960
+  fake_height: 640
+  osediff_port: 8000

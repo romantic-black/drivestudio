@@ -550,7 +550,7 @@ class BasicTrainer(nn.Module):
             loss_dict.update({"sky_loss_opacity": sky_loss_opacity})
         
         # depth loss
-        if self.depth_loss_fn is not None:
+        if self.depth_loss_fn is not None and hasattr(image_infos, "lidar_depth_map"):
             gt_depth = image_infos["lidar_depth_map"] 
             lidar_hit_mask = (gt_depth > 0).float() * valid_loss_mask
             pred_depth = outputs["depth"]
