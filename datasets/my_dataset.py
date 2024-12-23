@@ -1,11 +1,12 @@
-
 from omegaconf import OmegaConf
 from datasets.driving_dataset import DrivingDataset
 from utils.mytools import split_trajectory
 from typing import Dict
 from torch import Tensor
+import torch
 import numpy as np
 import random
+from numba import njit
 from utils.mytools import Grid2d,Grid2dNumba,farthest_point_sampling
 
 
@@ -79,15 +80,16 @@ class MyDataset(DrivingDataset):
         else:
             return super().split_train_test()
     
-def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, max_coverage=0.8):
+def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, max_coverage=0.8, cam_width=960, cam_height=640):
     source = dataset.lidar_source
     points = source.origins + source.directions * source.ranges
     grounds = source.grounds
     flow_class = source.flow_classes
+    timesteps = source.timesteps
 
     cameras = dataset.pixel_source.camera_data
 
-    grid = Grid2d(points, grounds, flow_class, cameras)
+    grid = Grid2d(points, grounds, flow_class, timesteps, cameras)
     grid_numba = Grid2dNumba(grid, radius=5)
     area_coverage = grid_numba.get_area_coverage()
 
@@ -95,5 +97,66 @@ def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, ma
     chosen_indices_ = grid_numba.indices[mask]
     _, chosen_indices = farthest_point_sampling(Tensor(chosen_indices_), num_points)
 
-    cam2worlds, intrinsics = grid.to_camera_pose(chosen_indices)
-    return cam2worlds, intrinsics
+    cam2worlds, intrinsics, norm_times, step_times = grid.to_camera_pose(chosen_indices)
+
+    obstacles = points[flow_class <= 0]
+    depth_maps = []
+
+    # depth map
+    for idx in range(len(chosen_indices)):
+        c2w, intrinsic, norm_time, step_time = cam2worlds[idx], intrinsics[idx], norm_times[idx], step_times[idx]
+        current_flow = flow_class[timesteps == step_time]
+        current_obstacles = points[timesteps == step_time]
+        current_objects = current_obstacles[current_flow > 0]
+        
+        current_points = np.concatenate([current_objects, obstacles])
+        intrinsic_4x4 = torch.nn.functional.pad(
+            intrinsic, (0, 1, 0, 1)
+        )
+        intrinsic_4x4[3, 3] = 1.0
+        lidar2img = intrinsic_4x4 @ c2w.inverse() 
+        current_points = (
+            lidar2img[:3, :3] @ current_points.T + lidar2img[:3, 3:4]
+        ).T # (num_pts, 3)  
+
+        depth = current_points[:, 2]
+        cam_points = current_points[:, :2] / (depth.unsqueeze(-1) + 1e-6) # (num_pts, 2)
+        valid_mask = (
+            (cam_points[:, 0] >= 0)
+            & (cam_points[:, 0] < cam_width)
+            & (cam_points[:, 1] >= 0)
+            & (cam_points[:, 1] < cam_height)
+            & (depth > 0)
+        ) # (num_pts, )
+        
+        cam_points = cam_points[valid_mask].cpu().numpy()
+        depth = depth[valid_mask].cpu().numpy()
+        depth_map = np.zeros((cam_height, cam_width))
+        depth_map = z_buffer(depth_map, cam_points, depth)
+        depth_maps.append(torch.Tensor(depth_map))
+        
+    return cam2worlds, intrinsics, norm_times, step_times, depth_maps
+
+
+@njit
+def z_buffer(depth_map, cam_points, depth):
+    for idx, point in enumerate(cam_points):
+        z = depth[idx]
+        x, y = point
+        x, y = int(round(x)), int(round(y))
+        if 0 <= x < depth_map.shape[1] and 0 <= y < depth_map.shape[0]:
+            if depth_map[y, x] == 0 or depth_map[y, x] > z:
+                depth_map[y, x] = z
+    return depth_map
+
+
+if __name__ == '__main__':
+    import os
+    data_root = "/mnt/e/Output/background/023_test"
+
+    cfg = OmegaConf.load(os.path.join(data_root, "config.yaml"))
+    cfg.data.data_root = "/home/a/drivestudio/data/waymo/processed/training"
+
+    dataset = MyDataset(cfg.data)
+    cam2worlds, intrinsics, norm_times, step_times, depth_maps = get_fake_gt_samples(dataset, min_coverage=0.6,
+                                                                                     max_coverage=0.8, num_points=100)

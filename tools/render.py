@@ -73,10 +73,10 @@ def main(args):
     # setup trainer
     trainer = import_str(cfg.trainer.type)(
         **cfg.trainer,
-        num_timesteps=990,
+        num_timesteps=995,
         model_config=cfg.model,
-        num_train_images=990,
-        num_full_images=990,
+        num_train_images=995,
+        num_full_images=995,
         test_set_indices=0,
         scene_aabb=aabb,
         device=device

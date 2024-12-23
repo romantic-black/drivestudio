@@ -7,7 +7,7 @@ trainer:
   optim:
     num_iters: 40000  # 总迭代次数
     use_grad_scaler: false  # 是否使用梯度缩放
-    cache_buffer_freq: 2000  # 训练时每隔2000步更新缓存，适用于多于3个摄像头的情况
+    cache_buffer_freq: -1  # 训练时每隔2000步更新缓存，适用于多于3个摄像头的情况
   render:
     near_plane: 0.1  # 渲染的近裁剪平面
     far_plane: 10000000000.0  # 渲染的远裁剪平面
@@ -128,7 +128,7 @@ render:
 
 # ------------- 日志配置 ------------ #
 logging:
-  vis_freq: 10000  # 训练可视化频率
+  vis_freq: 500  # 训练可视化频率
   print_freq: 10000  # 训练打印频率
   saveckpt_freq: 10000  # 检查点保存频率
   save_seperate_video: True  # 是否为每个场景保存单独的视频

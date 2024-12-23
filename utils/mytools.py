@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 from itertools import product
+
+from sympy.physics.quantum.gate import normalized
+
 from utils.grid_numba import Grid2dNumba
 import requests
 
@@ -141,17 +144,18 @@ def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
 
 
 class Grid2d:
-    def __init__(self, lidar_points, ground_mask, flow_class, gt_cameras, angle_resolution=36, grid_size=0.5):
+    def __init__(self, lidar_points, ground_mask, flow_class, timesteps, gt_cameras, angle_resolution=36, grid_size=0.5):
         assert lidar_points.shape[1] == 3
         self.lidar_points = lidar_points
         self.ground_mask = ground_mask
         self.flow_class = flow_class
+        self.timesteps = timesteps
         self.angle_resolution = angle_resolution
         p = self.lidar_points[~self.ground_mask]
         c = self.flow_class[~self.ground_mask]
         p = p[c <= 0]
         self.obstacles = p
-        self.grounds = self.lidar_points[~self.ground_mask]
+        self.grounds = self.lidar_points[self.ground_mask]
 
         self.grid_size = grid_size
         self.voxel_grid_2d, self.coord_range = create_voxel_grid_2d(p, self.grid_size)
@@ -168,14 +172,24 @@ class Grid2d:
         }
         cam2worlds = []
         intrinsics = []
+        normalized_time = []
+        step_time = []
+
         for cam in gt_cameras.values():
             cam2worlds.append(cam.cam_to_worlds)
             intrinsics.append(cam.intrinsics)
+            normalized_time.append(cam.normalized_time)
+
+            step_time.append(torch.Tensor(list(range(cam.start_timestep, cam.end_timestep))))
+
+        self.step_time = torch.cat(step_time, dim=0)
         self.cam2worlds = torch.cat(cam2worlds, dim=0)
         self.intrinsics = torch.cat(intrinsics, dim=0)
+        self.normalized_time = torch.cat(normalized_time, dim=0)
         self.gt_camera_set = CameraSet(self.cam2worlds, self.intrinsics)
         self.ray_casting_set(self.gt_camera_set)
         self.fov = self.gt_camera_set.fovs[0]
+        self.gt_cameras = gt_cameras
 
 
     def angle_to_theta(self, angle):
@@ -222,12 +236,15 @@ class Grid2d:
         return (i, j)
     
     def to_camera_pose(self, indices):
-        base_camera = self.gt_camera_set
+        normalized_time = self.normalized_time
+        step_time = self.step_time
 
         gt_xy = self.gt_camera_set.camera_to_worlds[:, :2, 3]
 
         cam2worlds = []
         intrinsics = []
+        norm_times = []
+        step_times = []
 
         for idx, (i, j, theta) in enumerate(indices):
             x, y = self.grid_to_coord(i, j)
@@ -236,8 +253,10 @@ class Grid2d:
             # 取最近的gt, 使用torch.norm
             gt_indice = torch.argmin(torch.norm(gt_xy - torch.tensor([x, y]), dim=1))
             base_cam2world = self.gt_camera_set.camera_to_worlds[gt_indice]
-            base_intrinsic = self.gt_camera_set.intrinsics[gt_indice]
+            base_intrinsic = self.gt_camera_set.intrinsics[0]   # 使用主相机内参
             base_angle = self.gt_camera_set.angles[gt_indice]
+            norm_t = normalized_time[gt_indice]
+            step = step_time[gt_indice]
 
             R_base_to_0 = torch.tensor([
                 [torch.cos(-base_angle), -torch.sin(-base_angle), 0],
@@ -263,10 +282,14 @@ class Grid2d:
 
             cam2worlds.append(cam2world)
             intrinsics.append(intrinsic)
+            norm_times.append(norm_t)
+            step_times.append(step)
 
         cam2worlds = torch.stack(cam2worlds, dim=0)
         intrinsics = torch.stack(intrinsics, dim=0)
-        return cam2worlds, intrinsics
+        norm_times = torch.stack(norm_times, dim=0)
+        step_times = torch.stack(step_times, dim=0)
+        return cam2worlds, intrinsics, norm_times, step_times
     
 
     def ray_casting(self, camera, num_rays=20, max_distance=50, save_hit=True, get_coverage=False):
@@ -460,7 +483,7 @@ if __name__ == '__main__':
     flow_class = torch.load("/home/a/drivestudio/notebook/data//flow_class.pth")
     cameras = torch.load("/home/a/drivestudio/notebook/data//cameras.pth")
 
-    grid = Grid2d(points, grounds, flow_class, cameras)
+    grid = Grid2d(points, grounds, flow_class, timesteps, cameras)
 
     grid_numba = Grid2dNumba(grid, radius=8)
     coverage = grid_numba.get_area_coverage()
