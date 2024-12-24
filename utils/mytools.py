@@ -1,30 +1,6 @@
 import torch
 import numpy as np
-from itertools import product
-
-from sympy.physics.quantum.gate import normalized
-
 from utils.grid_numba import Grid2dNumba
-import requests
-
-def load_osediff(port):
-    url = f"http://127.0.0.1:{port}/load_model"
-    response = requests.get(url, timeout=60)
-    return response.json()
-
-def process_osediff(port, input_folder, output_folder):
-    url = f"http://127.0.0.1:{port}/process_folder"
-    data = {
-        "input_folder": input_folder,
-        "output_folder": output_folder
-    }
-    response = requests.post(url, data=data, timeout=3600)
-    return response.json()
-
-def clear_osediff(port):
-    url = f"http://127.0.0.1:{port}/clear_model"
-    response = requests.get(url)
-    return response.json()
 
 
 def farthest_point_sampling(points, K, angle_resolution=36, pos_range=10):
