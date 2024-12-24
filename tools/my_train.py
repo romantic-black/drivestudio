@@ -320,6 +320,12 @@ def main(args):
             logger.info("Done caching rgb error maps")
 
         if step % cfg.my_config.fake_gt_add_freq == 0 and step > 0:
+            if not do_save:
+                trainer.save_checkpoint(
+                    log_dir=cfg.log_dir,
+                    save_only_model=True,
+                    is_final=False,
+                )
             render_dir = os.path.join(cfg.log_dir, f"render_{step:05d}")
             pred_dir = os.path.join(cfg.log_dir, f"pred_{step:05d}")
             width, height = cfg.my_config.width, cfg.my_config.height
