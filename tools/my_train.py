@@ -225,10 +225,13 @@ def main(args):
         trainer.set_train()
         trainer.preprocess_per_train_step(step=step)
         trainer.optimizer_zero_grad()  # zero grad
-
-        # get data
         train_step_camera_downscale = trainer._get_downscale_factor()
-        image_infos, cam_infos = dataset.train_image_set.next(train_step_camera_downscale)
+        use_fake_gt = random.random() < 0.1
+        if use_fake_gt and train_step_camera_downscale == 1.:
+            image_infos, cam_infos = dataset.fake_gt_next()
+        else:
+            image_infos, cam_infos = dataset.train_image_set.next(train_step_camera_downscale)
+
         for k, v in image_infos.items():
             if isinstance(v, torch.Tensor):
                 image_infos[k] = v.cuda(non_blocking=True)
@@ -343,6 +346,7 @@ def main(args):
                         radius=6,
                         grid_size=0.5,
                         angle_resolution=36,
+                        farthest_sample=False
                     )
 
                 for idx in range(len(cam2worlds)):
