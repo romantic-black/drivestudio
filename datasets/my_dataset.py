@@ -80,7 +80,16 @@ class MyDataset(DrivingDataset):
         else:
             return super().split_train_test()
     
-def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, max_coverage=0.8, cam_width=960, cam_height=640):
+def get_fake_gt_samples(dataset: MyDataset,
+                        num_points=200,
+                        min_coverage=0.6,
+                        max_coverage=0.8,
+                        cam_width=960,
+                        cam_height=640,
+                        radius=6,
+                        grid_size=0.5,
+                        angle_resolution=36,
+                        ):
     source = dataset.lidar_source
     points = source.origins + source.directions * source.ranges
     grounds = source.grounds
@@ -89,8 +98,8 @@ def get_fake_gt_samples(dataset: MyDataset, num_points=200, min_coverage=0.6, ma
 
     cameras = dataset.pixel_source.camera_data
 
-    grid = Grid2d(points, grounds, flow_class, timesteps, cameras)
-    grid_numba = Grid2dNumba(grid, radius=5)
+    grid = Grid2d(points, grounds, flow_class, timesteps, cameras, grid_size=grid_size, angle_resolution=angle_resolution)
+    grid_numba = Grid2dNumba(grid, radius=radius)
     area_coverage = grid_numba.get_area_coverage()
 
     mask = (grid_numba.area_coverage > min_coverage) & (grid_numba.area_coverage < max_coverage)

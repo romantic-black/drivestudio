@@ -5,7 +5,7 @@ from numba import njit, prange
 
 
 class Grid2dNumba:
-    def __init__(self, grid, radius=8, step=0.5, angle_step=1):
+    def __init__(self, grid, radius=8):
         self.voxel_grid_2d = grid.voxel_grid_2d.numpy()
         (x_min, x_max, y_min, y_max) = grid.coord_range
 
@@ -39,18 +39,14 @@ class Grid2dNumba:
         self.starts = starts
         self.counts = counts
 
-        self.step = step
-        self.angle_step = angle_step
-        step = self.step / self.grid_size
-
         # 取voxel_grid_2d中每个voxel的中心点
-        indices = np.meshgrid(np.arange(self.voxel_grid_2d.shape[0], dtype=int, step=step),
-                              np.arange(self.voxel_grid_2d.shape[1], dtype=int, step=step),
+        indices = np.meshgrid(np.arange(self.voxel_grid_2d.shape[0], dtype=int),
+                              np.arange(self.voxel_grid_2d.shape[1], dtype=int),
                               indexing='ij')
         indices = np.stack(indices, axis=-1).reshape(-1, 2)  # 将 indices 转换为二维数组
 
         # 取在pose半径8m内的点
-        theta = np.arange(0, self.angle_resolution, dtype=int, step=self.angle_step)  # 确保 angle_resolution 是整数
+        theta = np.arange(0, self.angle_resolution, dtype=int)  # 确保 angle_resolution 是整数
         self.area_indices = np.empty((0, 2))
         x, y = self.coord_to_grid(self.poses[:, :2])
         for i in range(x.shape[0]):

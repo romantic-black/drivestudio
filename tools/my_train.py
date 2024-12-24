@@ -17,10 +17,10 @@ from utils.backup import backup_project
 from utils.logging import MetricLogger, setup_logging
 from models.video_utils import render_images, save_videos
 from datasets.driving_dataset import DrivingDataset
+from utils.osediff import OSEDiffInfer
 
 from datasets.my_dataset import get_fake_gt_samples
 from utils.mytools import load_osediff, process_osediff, clear_osediff
-import pyiqa
 
 logger = logging.getLogger()
 current_time = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
@@ -317,28 +317,40 @@ def main(args):
             logger.info("Done caching rgb error maps")
 
         if step % cfg.my_config.fake_gt_add_freq == 0 and step > 0:
-            device = trainer.device
             render_dir = os.path.join(cfg.log_dir, f"render_{step:05d}")
             pred_dir = os.path.join(cfg.log_dir, f"pred_{step:05d}")
-            os.makedirs(render_dir, exist_ok=True)
-            os.makedirs(pred_dir, exist_ok=True)
             width, height = cfg.my_config.width, cfg.my_config.height
             image_info_list, cam_info_list = [], []
-            iqa_metric = pyiqa.create_metric('brisque', device=device)
             with torch.no_grad():
-                if not do_save:
-                    trainer.save_checkpoint(
-                        log_dir=cfg.log_dir,
-                        save_only_model=True,
-                        is_final=step == trainer.num_iters,
-                    )
+                os.makedirs(render_dir, exist_ok=True)
+                for file in os.listdir(render_dir):
+                    if file.endswith(".png"):
+                        os.remove(os.path.join(render_dir, file))
 
-                cam2worlds, intrinsics = get_fake_gt_samples(dataset)
+                os.makedirs(pred_dir, exist_ok=True)
+                for file in os.listdir(pred_dir):
+                    if file.endswith(".png"):
+                        os.remove(os.path.join(pred_dir, file))
+
+                cam2worlds, intrinsics, norm_times, step_times, depth_maps = \
+                    get_fake_gt_samples(
+                        dataset,
+                        num_points=200,
+                        min_coverage=0.6,
+                        max_coverage=0.8,
+                        cam_width=960,
+                        cam_height=640,
+                        radius=6,
+                        grid_size=0.5,
+                        angle_resolution=36,
+                    )
 
                 for idx in range(len(cam2worlds)):
                     c2w = cam2worlds[idx]
                     intrinsic = intrinsics[idx]
-
+                    depth_map = depth_maps[idx]
+                    step_time = step_times[idx]
+                    norm_time = norm_times[idx]
 
                     cam_info = {
                         "camera_to_world": c2w.to(device),
@@ -376,12 +388,9 @@ def main(args):
                         dtype=torch.long,
                     )
 
-                    time_step = dataset.pixel_source.normalized_time.shape
-                    t = random.randint(0, time_step - 1)
-
                     normalized_time = torch.full(
                         (height, width),
-                        dataset.pixel_source.normalized_time[t],
+                        norm_time,
                         dtype=torch.float32,
                     )
 
@@ -392,6 +401,8 @@ def main(args):
                         "img_idx": image_id.to(device),
                         "pixel_coords": pixel_coords.to(device),
                         "normed_time": normalized_time.to(device),
+                        "depth_map": depth_map.to(device),
+
                     }
 
                     output = trainer(image_info, cam_info, False)
@@ -405,28 +416,37 @@ def main(args):
                     img = to8b(output["rgb"])
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-                    iqa_img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).to(device)
-
-                    score = iqa_metric(iqa_img)
-                    if score > 60:
-                        continue
-
-                    save_path = os.path.join(render_dir, f"{idx:03d}_{step:05d}.png")
+                    save_path = os.path.join(render_dir, f"{idx:03d}.png")
                     cv2.imwrite(save_path, img)
 
                     image_info_list.append(image_info)
                     cam_info_list.append(cam_info)
 
-            del trainer
+            model = OSEDiffInfer()
+            model.infer(render_dir, pred_dir)
+            model.clear_model()
+
+            for idx in range(len(cam2worlds)):
+                render_img_path = os.path.join(render_dir, f"{idx:03d}.png")
+                pred_img_path = os.path.join(pred_dir, f"{idx:03d}.png")
+
+                if not (os.path.exists(render_img_path) and os.path.exists(pred_img_path)):
+                    print(pred_img_path)
+                    continue
+
+                pred_img = cv2.imread(pred_img_path)
+                pred_img = cv2.cvtColor(pred_img, cv2.COLOR_RGB2BGR)
+                pred_img = torch.from_numpy(pred_img).float() / 255.0
+
+                image_info_list[idx]["pixels"] = pred_img.to(device)
+
+            to_delete = [idx for idx, image_info in enumerate(image_info_list) if "pixels" not in image_info]
+            for idx in reversed(to_delete):
+                del image_info_list[idx]
+                del cam_info_list[idx]
+
             torch.cuda.empty_cache()
-
-            port = cfg.my_config.osediff_port
-            res = load_osediff(port=port)
-            if not res["success"]:
-                raise Exception("Failed to load osediff server")
-            res = process_osediff(port, render_dir, pred_dir)
-            res = clear_osediff(port)
-
+            dataset.load_fake_gt(image_info_list, cam_info_list, True)
 
     logger.info("Training done!")
 
