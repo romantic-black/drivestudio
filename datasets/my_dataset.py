@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import random
 from numba import njit
-from utils.mytools import Grid2d,Grid2dNumba,farthest_point_sampling
+from utils.mytools import Grid2d,Grid2dNumba,farthest_point_sampling, random_point_sampling
 
 
 class MyDataset(DrivingDataset):
@@ -89,6 +89,7 @@ def get_fake_gt_samples(dataset: MyDataset,
                         radius=6,
                         grid_size=0.5,
                         angle_resolution=36,
+                        farthest_sample=True
                         ):
     source = dataset.lidar_source
     points = source.origins + source.directions * source.ranges
@@ -104,8 +105,10 @@ def get_fake_gt_samples(dataset: MyDataset,
 
     mask = (grid_numba.area_coverage > min_coverage) & (grid_numba.area_coverage < max_coverage)
     chosen_indices_ = grid_numba.indices[mask]
-    _, chosen_indices = farthest_point_sampling(Tensor(chosen_indices_), num_points)
-
+    if farthest_sample:
+        _, chosen_indices = farthest_point_sampling(Tensor(chosen_indices_), num_points)
+    else:
+        _, chosen_indices = random_point_sampling(Tensor(chosen_indices_), num_points)
     cam2worlds, intrinsics, norm_times, step_times = grid.to_camera_pose(chosen_indices)
 
     obstacles = points[flow_class <= 0]

@@ -78,6 +78,15 @@ def farthest_point_sampling(points, K, angle_resolution=36, pos_range=10):
     sampled_points = points[farthest_indices]
     return farthest_indices, sampled_points
 
+def random_point_sampling(points, K):
+    device = points.device
+    N = points.shape[0]
+    if K >= N:
+        return torch.arange(N, device=device), points
+
+    indices = torch.randint(0, N, (K,), device=device)
+    return indices, points[indices]
+
 
 def split_trajectory(trajectory, num_splits=0, min_count=1, min_length=0):
     """
@@ -475,16 +484,3 @@ def create_voxel_grid_2d(lidar_points, voxel_size=0.5):
     voxel_grid = counts.view(grid_size_x, grid_size_y)
     
     return voxel_grid, (x_min, x_max, y_min, y_max)
-
-if __name__ == '__main__':
-
-    points = torch.load("/home/a/drivestudio/notebook/data/points.pth")
-    grounds = torch.load("/home/a/drivestudio/notebook/data//grounds.pth")
-    flow_class = torch.load("/home/a/drivestudio/notebook/data//flow_class.pth")
-    cameras = torch.load("/home/a/drivestudio/notebook/data//cameras.pth")
-
-    grid = Grid2d(points, grounds, flow_class, timesteps, cameras)
-
-    grid_numba = Grid2dNumba(grid, radius=8)
-    coverage = grid_numba.get_area_coverage()
-    print(coverage)
