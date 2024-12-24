@@ -20,7 +20,6 @@ from datasets.driving_dataset import DrivingDataset
 from utils.osediff import OSEDiffInfer
 
 from datasets.my_dataset import get_fake_gt_samples
-from utils.mytools import load_osediff, process_osediff, clear_osediff
 
 logger = logging.getLogger()
 current_time = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
@@ -322,7 +321,7 @@ def main(args):
         if step % cfg.my_config.fake_gt_add_freq == 0 and step > 0:
             render_dir = os.path.join(cfg.log_dir, f"render_{step:05d}")
             pred_dir = os.path.join(cfg.log_dir, f"pred_{step:05d}")
-            width, height = cfg.my_config.width, cfg.my_config.height
+            width, height = 960, 640
             image_info_list, cam_info_list = [], []
             with torch.no_grad():
                 os.makedirs(render_dir, exist_ok=True)
@@ -338,11 +337,11 @@ def main(args):
                 cam2worlds, intrinsics, norm_times, step_times, depth_maps = \
                     get_fake_gt_samples(
                         dataset,
-                        num_points=200,
+                        num_points=cfg.my_config.num_sample,
                         min_coverage=0.6,
                         max_coverage=0.8,
-                        cam_width=960,
-                        cam_height=640,
+                        cam_width=width,
+                        cam_height=height,
                         radius=6,
                         grid_size=0.5,
                         angle_resolution=36,
