@@ -32,7 +32,7 @@ class Args:
     latent_tiled_size = 96
     latent_tiled_overlap = 32
 
-neg_prompts = [
+neg_prompts = [     # not use
 'man', 'crowded', 'person', 'walk','pick up','skate', 'skier', 'woman', 'boy', 'girl','umbrella','pedestrian','motorbike','scooter','motorcyclist',
                                   'drive', 'car','taxi', 'jeep', 'vehicle', 'suv', 'minivan',
                                   'van', 'snowstorm', 'snow', 'snowy', 'blue', 'blanket', 'toy car', 'motorcycle', 'park', 'parking garage',
@@ -62,6 +62,7 @@ def get_validation_prompt(args, image, model, device='cuda'):
             validation_prompt.append(prompt)
 
     validation_prompt = ','.join(validation_prompt)
+    validation_prompt = ''
     return validation_prompt, lq
 
 class OSEDiffInfer:
