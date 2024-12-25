@@ -8,8 +8,6 @@ from torchvision import transforms
 import torchvision.transforms.functional as F
 import numpy as np
 from PIL import Image
-
-from third_party.OSEDiff.app import neg_prompt
 from third_party.OSEDiff.osediff import OSEDiff_test
 from third_party.OSEDiff.my_utils.wavelet_color_fix import adain_color_fix, wavelet_color_fix
 
@@ -17,15 +15,15 @@ from third_party.OSEDiff.ram.models.ram_lora import ram
 from third_party.OSEDiff.ram import inference_ram as inference
 
 class Args:
-    pretrained_model_name_or_path = "stabilityai/stable-diffusion-2-1-base"
+    pretrained_model_name_or_path = "/root/autodl-tmp/models/models--stabilityai--stable-diffusion-2-1-base"
     seed = 42
     process_size = 512
     upscale = 1
     align_method = 'adain'
-    osediff_path = '/mnt/e/Output/osediff/model_32001.pkl'
+    osediff_path = '/root/autodl-tmp/models/model_105001.pkl'
     prompt = ''
-    ram_path = "/mnt/e/download/ram_swin_large_14m.pth"
-    ram_ft_path = None
+    ram_path = "/root/autodl-tmp/models/ram_swin_large_14m.pth"
+    ram_ft_path = "/root/autodl-tmp/models/DAPE.pth"
     save_prompts = True
     mixed_precision = 'fp16'
     merge_and_unload_lora = False
@@ -35,7 +33,7 @@ class Args:
     latent_tiled_overlap = 32
 
 neg_prompts = [
-'man', 'crowded', 'person', 'walk','pick up','skate', 'skier', 'woman','umbrella','pedestrian','motorbike','scooter','motorcyclist',
+'man', 'crowded', 'person', 'walk','pick up','skate', 'skier', 'woman', 'boy', 'girl','umbrella','pedestrian','motorbike','scooter','motorcyclist',
                                   'drive', 'car','taxi', 'jeep', 'vehicle', 'suv', 'minivan',
                                   'van', 'snowstorm', 'snow', 'snowy', 'blue', 'blanket', 'toy car', 'motorcycle', 'park', 'parking garage',
                                   'white','black',  'fill', 'night', 'rainy', 'rain'
@@ -60,10 +58,7 @@ def get_validation_prompt(args, image, model, device='cuda'):
     # validation_prompt ="road, street, building"
     validation_prompt = []
     for prompt in prompts.split(','):
-        if prompt.strip() not in ['man', 'crowded', 'person', 'walk','pick up','skate', 'skier', 'woman','umbrella','pedestrian','motorbike','scooter','motorcyclist',
-                                  'drive', 'car','taxi', 'jeep', 'vehicle', 'suv', 'minivan',
-                                  'van', 'snowstorm', 'snow', 'snowy', 'blue', 'blanket', 'toy car', 'motorcycle', 'park', 'parking garage',
-                                  'white','black',  'fill', 'night', 'rainy', 'rain']:
+        if prompt.strip() not in neg_prompts:
             validation_prompt.append(prompt)
 
     validation_prompt = ','.join(validation_prompt)

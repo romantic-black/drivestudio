@@ -225,8 +225,8 @@ def main(args):
         trainer.preprocess_per_train_step(step=step)
         trainer.optimizer_zero_grad()  # zero grad
         train_step_camera_downscale = trainer._get_downscale_factor()
-        use_fake_gt = random.random() < 0.1
-        if use_fake_gt and train_step_camera_downscale == 1.:
+        use_fake_gt = random.random() < 0.2
+        if use_fake_gt and train_step_camera_downscale == 1. and len(dataset.fake_image_infos) != 0:
             image_infos, cam_infos = dataset.fake_gt_next()
         else:
             image_infos, cam_infos = dataset.train_image_set.next(train_step_camera_downscale)
@@ -318,7 +318,7 @@ def main(args):
                 )
             logger.info("Done caching rgb error maps")
 
-        if step % cfg.my_config.fake_gt_add_freq == 0 and step > 0:
+        if step % cfg.my_config.fake_gt_add_freq == 0 and step > 0 and step != trainer.num_iters:
             if not do_save:
                 trainer.save_checkpoint(
                     log_dir=cfg.log_dir,
@@ -353,8 +353,9 @@ def main(args):
                         angle_resolution=36,
                         farthest_sample=False
                     )
-
+                trainer.set_eval()
                 for idx in range(len(cam2worlds)):
+
                     c2w = cam2worlds[idx]
                     intrinsic = intrinsics[idx]
                     depth_map = depth_maps[idx]
@@ -456,6 +457,7 @@ def main(args):
 
             torch.cuda.empty_cache()
             dataset.load_fake_gt(image_info_list, cam_info_list, True)
+            trainer.set_train()
 
     logger.info("Training done!")
 

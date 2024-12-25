@@ -525,6 +525,7 @@ class SMPLNodes(RigidNodes):
             "points_ids": self.point_ids,
             "instances_size": self.instances_size,
             "instances_fv": self.instances_fv,
+            "nn_ind": self.nn_ind,
         })
         return state_dict
 
@@ -549,6 +550,7 @@ class SMPLNodes(RigidNodes):
             use_voxel_deformer=self.use_voxel_deformer,
             is_resume=True
         ).to(self.device)
+        self.nn_ind = state_dict.pop("nn_ind")
         if self.use_voxel_deformer:
             self.template.voxel_deformer.enable_voxel_correction()
         msg = VanillaGaussians.load_state_dict(self, state_dict, **kwargs)
