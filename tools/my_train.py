@@ -411,7 +411,7 @@ def main(args):
                         "img_idx": image_id.to(device),
                         "pixel_coords": pixel_coords.to(device),
                         "normed_time": normalized_time.to(device),
-                        "depth_map": depth_map.to(device),
+                        "lidar_depth_map": depth_map.to(device),
 
                     }
 
@@ -435,6 +435,8 @@ def main(args):
             model = OSEDiffInfer()
             model.infer(render_dir, pred_dir)
             model.clear_model()
+
+
 
             for idx in range(len(cam2worlds)):
                 render_img_path = os.path.join(render_dir, f"{idx:03d}.png")
