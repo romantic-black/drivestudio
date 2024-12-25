@@ -239,7 +239,7 @@ def main(args):
                 cam_infos[k] = v.cuda(non_blocking=True)
 
         # forward & backward
-        outputs = trainer(image_infos, cam_infos)
+        outputs = trainer(image_infos, cam_infos, False)
         trainer.update_visibility_filter()
 
         loss_dict = trainer.compute_losses(
@@ -362,6 +362,9 @@ def main(args):
                     step_time = step_times[idx]
                     norm_time = norm_times[idx]
 
+                    if (depth_map == 0).all():  # 没有雷达点，无法计算 loss
+                        continue
+
                     cam_info = {
                         "camera_to_world": c2w.to(device),
                         "intrinsics": intrinsic.to(device),
@@ -412,7 +415,6 @@ def main(args):
                         "pixel_coords": pixel_coords.to(device),
                         "normed_time": normalized_time.to(device),
                         "lidar_depth_map": depth_map.to(device),
-
                     }
 
                     output = trainer(image_info, cam_info, False)
